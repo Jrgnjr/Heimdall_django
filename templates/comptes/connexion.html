@@ -1,0 +1,26 @@
+{% extends "comptes/base.html" %}
+{% block titre %}Connexion · Heimdall{% endblock %}
+{% block contenu %}
+<h1>Connexion</h1>
+<p class="sous">Identifiez-vous pour accéder au stock.</p>
+
+{% if formulaire.errors %}
+<ul class="erreurs">
+  {% for erreur in formulaire.non_field_errors %}<li>{{ erreur }}</li>{% endfor %}
+  {% for champ in formulaire %}{% for erreur in champ.errors %}
+    <li>{{ champ.label }} : {{ erreur }}</li>
+  {% endfor %}{% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% for champ in formulaire %}
+  <div class="champ">
+    <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+    {{ champ }}
+  </div>
+  {% endfor %}
+  <button type="submit">Se connecter</button>
+</form>
+{% endblock %}

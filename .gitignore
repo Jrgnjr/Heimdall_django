@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+env/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+donnees.db
+comptes.db
+staticfiles/
+.env
+*.log

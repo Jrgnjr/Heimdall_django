@@ -1,0 +1,503 @@
+# -*- coding: utf-8 -*-
+"""Les actions sur le matériel : catalogue, emprunts, consommables, séries.
+
+Trois notions qu'il faut tenir séparées :
+
+- **la quantité** ne bouge qu'à la réception, à la suppression, et à la
+  consommation d'un consommable. Emprunter ne la change pas ;
+- **la disponibilité** est la quantité moins ce qui est dehors. C'est elle
+  qu'on vérifie avant de sortir quoi que ce soit ;
+- **la consommation** est le seul cas où du matériel sorti ne revient pas. Elle
+  est réservée aux articles de catégorie « Consommable » : un outil cassé
+  relève d'une correction d'inventaire, et mélanger les deux rendrait le suivi
+  des consommables illisible.
+"""
+
+from django.db.models import Max
+from django.utils import timezone
+
+from ..models import Material, MaterialLog, MaterialReservation, Mission
+from . import action, journaux
+from .champs import (AFFECTATIONS, ErreurAction, affectation, ligne, qte,
+                     texte)
+
+SANS_MISSION = Mission.SANS_MISSION
+CATEGORIE_CONSOMMABLE = Material.CATEGORIE_CONSOMMABLE
+
+
+# --------------------------------------------------------------------------
+# Lectures communes
+# --------------------------------------------------------------------------
+
+def article(nom):
+    m = Material.objects.filter(pk=nom).first()
+    if m is None:
+        raise ErreurAction("L'article « %s » n'existe plus. Rechargez la page." % nom)
+    return m
+
+
+def par_libelle(libelle):
+    """Tous les exemplaires portant ce nom visible, dans l'ordre du catalogue."""
+    return list(Material.objects.filter(libelle__iexact=libelle)
+                | Material.objects.filter(libelle="", name__iexact=libelle))
+
+
+def identifie(nom, etiquette, numero_serie):
+    """L'exemplaire exactement décrit par ce triplet, ou rien.
+
+    C'est ce qui permet à une réception de retomber sur la bonne ligne : deux
+    perceuses de même nom mais d'étiquettes différentes sont deux articles.
+    """
+    for m in Material.objects.all():
+        if ((m.libelle or m.name).casefold() == nom.casefold()
+                and m.etiquette == (etiquette or "")
+                and m.numero_serie == (numero_serie or "")):
+            return m
+    return None
+
+
+def par_serie(libelle, numero_serie):
+    for m in Material.objects.filter(numero_serie=numero_serie):
+        if (m.libelle or m.name).casefold() == libelle.casefold():
+            return m
+    return None
+
+
+def creer_article(nom, cat, affect, quantite, etiquette="", numero_serie=""):
+    """Crée un exemplaire, en suffixant la clé si le nom est déjà pris.
+
+    `name` est la clé, `libelle` le nom affiché : deux exemplaires du même
+    article portent le même libellé et des clés distinctes.
+    """
+    cle = nom
+    suffixe = 2
+    while Material.objects.filter(pk=cle).exists():
+        cle = "%s #%d" % (nom, suffixe)
+        suffixe += 1
+    ordre = (Material.objects.aggregate(m=Max("ordre"))["m"] or 0) + 1
+    return Material.objects.create(
+        name=cle, ordre=ordre, cat=cat, qty=quantite, seuil=0,
+        affectation=affect or "Commun", libelle=nom,
+        etiquette=etiquette or "", numero_serie=numero_serie or "")
+
+
+def creer_emprunt(m, quantite, mission, par_qui, pack=""):
+    """`pack` retient la malette d'où l'article est sorti, ou reste vide."""
+    seq = MaterialReservation.objects.filter(material=m).aggregate(m=Max("seq"))["m"]
+    seq = -1 if seq is None else seq
+    return MaterialReservation.objects.create(
+        material=m, seq=seq + 1, qty=quantite, mission=mission,
+        taken_by=par_qui, returned_by=None, taken_at=timezone.now(),
+        returned_at=None, pack=pack or "")
+
+
+def emprunts_ouverts_de_mission(nom):
+    return list(MaterialReservation.objects.filter(mission=nom,
+                                                   returned_by__isnull=True)
+                .order_by("material_id", "seq"))
+
+
+def mission_existante(nom):
+    m = Mission.objects.filter(pk=nom).first()
+    if m is None or not m.is_meta:
+        raise ErreurAction("La mission « %s » n'existe pas. "
+                           "Créez-la d'abord dans « Missions en cours »." % nom)
+    return m
+
+
+def mission_demandee(p):
+    nom = texte(p, "mission", obligatoire=False, defaut=SANS_MISSION)
+    return None if nom == SANS_MISSION else mission_existante(nom)
+
+
+# --------------------------------------------------------------------------
+# Catalogue
+# --------------------------------------------------------------------------
+
+@action("materiel.creer")
+def materiel_creer(utilisateur, p):
+    nom = texte(p, "nom", maxi=200)
+    n = qte(p)
+    etiquette = texte(p, "etiquette", obligatoire=False, maxi=200)
+    numero_serie = texte(p, "numeroSerie", obligatoire=False, maxi=200)
+
+    # Un article exactement identique — même nom, même étiquette, même série —
+    # est un réapprovisionnement, pas un nouvel article.
+    existant = identifie(nom, etiquette, numero_serie)
+    if existant:
+        existant.qty += n
+        existant.save(update_fields=["qty"])
+        journaux.materiel("ENTRÉE", existant.nom_affiche, n, utilisateur,
+                          identite=existant.identite)
+        return ("Entrée de %d × %s" % (n, existant.nom_affiche),
+                [["materiel", existant.name], ["matLog", ""]])
+
+    m = creer_article(nom, texte(p, "cat", obligatoire=False,
+                                 defaut="Accessoire", maxi=80),
+                      affectation(p), n, etiquette, numero_serie)
+    journaux.materiel("CRÉATION", m.nom_affiche, n, utilisateur,
+                      identite=m.identite)
+    return "Article « %s » créé" % m.nom_affiche, [["materiel", m.name], ["matLog", ""]]
+
+
+@action("materiel.reception")
+def materiel_reception(utilisateur, p):
+    m = article(texte(p, "nom", maxi=200))
+    n = qte(p)
+    m.qty += n
+    m.save(update_fields=["qty"])
+    journaux.materiel("ENTRÉE", m.nom_affiche, n, utilisateur,
+                      identite=m.identite)
+    return ("Entrée de %d × %s" % (n, m.nom_affiche),
+            [["materiel", m.name], ["matLog", ""]])
+
+
+@action("materiel.affectation")
+def materiel_affectation(utilisateur, p):
+    m = article(texte(p, "nom", maxi=200))
+    nouvelle = affectation(p, obligatoire=True)
+    if nouvelle == m.affectation:
+        return "%s : affectation inchangée" % m.nom_affiche, [["materiel", m.name]]
+    m.affectation = nouvelle
+    m.save(update_fields=["affectation"])
+    return ("%s affecté à « %s »" % (m.nom_affiche, nouvelle),
+            [["materiel", m.name]])
+
+
+@action("materiel.supprimer")
+def materiel_supprimer(utilisateur, p):
+    m = article(texte(p, "nom", maxi=200))
+    if any(r.ouvert for r in m.emprunts.all()):
+        raise ErreurAction("« %s » est encore emprunté. Attendez son retour."
+                           % m.designation)
+    nom, affiche = m.name, m.nom_affiche
+    m.delete()
+    return ("Article « %s » supprimé" % affiche, [["materiel", nom]])
+
+
+# --------------------------------------------------------------------------
+# Exemplaires identifiés
+#
+# Un consommable dont on veut savoir lequel a servi est enregistré exemplaire
+# par exemplaire : une ligne, une quantité de 1, son numéro de série. C'est le
+# modèle déjà employé pour les portables et les SSD, et il n'en faut pas un
+# second — la traçabilité vient alors d'elle-même, puisque le journal recopie
+# `identite` à chaque mouvement.
+# --------------------------------------------------------------------------
+
+def _serie_libre(libelle, serie, sauf):
+    """Un numéro de série ne peut désigner qu'un exemplaire.
+
+    Le contrôle porte sur le libellé, pas sur tout le stock : deux familles
+    d'articles peuvent numéroter les leurs à partir de 1 sans se gêner, et
+    refuser « 0001 » parce qu'un autre produit le porte déjà serait absurde.
+    """
+    if not serie:
+        return
+    autre = par_serie(libelle, serie)
+    if autre is not None and autre.name != sauf:
+        raise ErreurAction(
+            "Le numéro de série « %s » est déjà porté par un exemplaire de "
+            "« %s »." % (serie, libelle))
+
+
+@action("materiel.identifiants")
+def materiel_identifiants(utilisateur, p):
+    """Pose ou corrige l'étiquette et le numéro de série d'un exemplaire.
+
+    Ni la clé ni le libellé ne bougent : les emprunts, les lignes de pack et
+    les templates citent la clé, et la réécrire les ferait pointer dans le vide.
+    """
+    m = article(texte(p, "nom", maxi=200))
+    etiquette = texte(p, "etiquette", obligatoire=False, maxi=200)
+    serie = texte(p, "numeroSerie", obligatoire=False, maxi=200)
+    libelle = m.nom_affiche
+    _serie_libre(libelle, serie, sauf=m.name)
+    if (m.etiquette, m.numero_serie) == (etiquette, serie):
+        return "%s : identifiants inchangés" % m.designation, [["materiel", m.name]]
+    m.etiquette, m.numero_serie = etiquette, serie
+    m.save(update_fields=["etiquette", "numero_serie"])
+    return ("%s : %s" % (libelle, m.identite or "plus d'identifiant"),
+            [["materiel", m.name]])
+
+
+@action("materiel.creer.lot")
+def materiel_creer_lot(utilisateur, p):
+    """Enregistre plusieurs exemplaires d'un même article, un par série.
+
+    Chaque série donne une ligne de quantité 1 : c'est ce qui permettra de dire
+    lequel a été consommé. Tout est vérifié avant la première écriture — un lot
+    de cinquante à moitié enregistré laisserait l'inventaire dans un état que
+    personne ne saurait rattraper.
+    """
+    nom = texte(p, "nom", maxi=200)
+    cat = texte(p, "cat", obligatoire=False, defaut="Accessoire", maxi=80)
+    affect = affectation(p)
+    brutes = p.get("series")
+    if not isinstance(brutes, list) or not brutes:
+        raise ErreurAction("Aucun numéro de série fourni.")
+    if len(brutes) > 500:
+        raise ErreurAction("Trop d'exemplaires en une seule fois (maximum 500).")
+
+    series, vues = [], set()
+    for brute in brutes:
+        serie = texte({"s": brute}, "s", maxi=200)
+        cle = serie.casefold()
+        if cle in vues:
+            raise ErreurAction(
+                "Le numéro de série « %s » figure deux fois dans la liste." % serie)
+        vues.add(cle)
+        _serie_libre(nom, serie, sauf=None)
+        series.append(serie)
+
+    etiquettes = p.get("etiquettes") or {}
+    if not isinstance(etiquettes, dict):
+        raise ErreurAction("Étiquettes invalides.")
+
+    cibles = [["matLog", ""]]
+    for serie in series:
+        m = creer_article(nom, cat, affect, 1,
+                          texte(etiquettes, serie, obligatoire=False, maxi=200),
+                          serie)
+        journaux.materiel("CRÉATION", m.nom_affiche, 1, utilisateur,
+                          identite=m.identite)
+        cibles.append(["materiel", m.name])
+    return ("%d exemplaire(s) de « %s » enregistrés" % (len(series), nom), cibles)
+
+
+@action("materiel.seuil")
+def materiel_seuil(utilisateur, p):
+    """Le stock en dessous duquel l'article est signalé à recommander.
+
+    Zéro vaut « pas de seuil » : c'est la valeur de départ de tous les
+    articles, et elle ne doit rien déclencher.
+    """
+    m = article(texte(p, "nom", maxi=200))
+    seuil = qte(p, "seuil", mini=0)
+    m.seuil = seuil
+    m.save(update_fields=["seuil"])
+    if not seuil:
+        return ("%s : plus de seuil d'alerte" % m.nom_affiche, [["materiel", m.name]])
+    return ("%s : alerte sous %d unité(s)" % (m.nom_affiche, seuil),
+            [["materiel", m.name]])
+
+
+# --------------------------------------------------------------------------
+# Emprunts
+# --------------------------------------------------------------------------
+
+@action("materiel.emprunt")
+def materiel_emprunt(utilisateur, p):
+    m = article(texte(p, "nom", maxi=200))
+    n = qte(p)
+    mission = mission_demandee(p)
+    commentaire = texte(p, "commentaire", obligatoire=False, maxi=500)
+
+    libre = m.disponible()
+    if n > libre:
+        raise ErreurAction(
+            "Stock insuffisant : %d unité(s) disponible(s) de « %s » hors "
+            "emprunts en cours, %d demandée(s)." % (libre, m.nom_affiche, n))
+
+    nom_mission = mission.name if mission else SANS_MISSION
+    creer_emprunt(m, n, nom_mission, utilisateur)
+    journaux.materiel("SORTIE", m.nom_affiche, n, utilisateur, nom_mission,
+                      commentaire, m.identite)
+    resume = ("Emprunt de %d × %s" % (n, m.nom_affiche) if mission is None else
+              "Emprunt de %d × %s pour « %s »" % (n, m.nom_affiche, mission.name))
+    return resume, [["materiel", m.name], ["matLog", ""]]
+
+
+@action("materiel.emprunt.groupe")
+def materiel_emprunt_groupe(utilisateur, p):
+    """Un panier : des articles à l'unité, des malettes entières, ou les deux.
+
+    Tout part ensemble ou rien ne part. Mêler des malettes rend la règle plus
+    nécessaire encore — sortir la malette puis buter sur un câble laisserait la
+    moitié du chargement dehors, et personne ne saurait laquelle.
+
+    La demande est **cumulée** avant d'être confrontée au stock. Un adaptateur
+    peut être réclamé deux fois — une fois dans une malette, une fois à
+    l'unité — et chaque ligne prise isolément passerait alors qu'ensemble elles
+    ne passent pas. C'est `pris` qui l'empêche.
+    """
+    from .packs import contenu_servi, pack_deja_dehors, pack_existant
+    from .packs import commentaire_de_pack
+
+    mission = mission_demandee(p)
+    commentaire = texte(p, "commentaire", obligatoire=False, maxi=500)
+
+    lignes = p.get("lignes") or []
+    noms_packs = p.get("packs") or []
+    if not isinstance(lignes, list) or not isinstance(noms_packs, list):
+        raise ErreurAction("Sélection invalide.")
+    if not lignes and not noms_packs:
+        raise ErreurAction("Aucun article sélectionné.")
+    if len(lignes) > 200:
+        raise ErreurAction("Trop d'articles en une seule fois.")
+    if len(noms_packs) > 50:
+        raise ErreurAction("Trop de malettes en une seule fois.")
+
+    prepare, pris, vus = [], {}, set()
+
+    def engager(m, n, pack_nom):
+        restant = m.disponible() - pris.get(m.name, 0)
+        if n > restant:
+            origine = (" Le pack « %s » n'est pas sorti." % pack_nom if pack_nom
+                       else "")
+            raise ErreurAction(
+                "Stock insuffisant pour « %s » : %d disponible(s), %d "
+                "demandée(s). Aucun emprunt n'a été enregistré.%s"
+                % (m.designation, max(0, restant), n, origine))
+        pris[m.name] = pris.get(m.name, 0) + n
+        prepare.append((m, n, pack_nom))
+
+    for brut in noms_packs:
+        nom = texte({"nom": brut}, "nom", maxi=200)
+        if nom in vus:
+            raise ErreurAction("Le pack « %s » est sélectionné deux fois." % nom)
+        vus.add(nom)
+        pack = pack_existant(nom)
+        deja = pack_deja_dehors(pack.name)
+        for m, n in contenu_servi(pack.name, {}):
+            if deja.get(m.name):
+                raise ErreurAction(
+                    "« %s » est déjà sorti du pack « %s » (%d unité(s)). "
+                    "Rendez-le avant de reprendre la malette."
+                    % (m.designation, pack.name, deja[m.name]))
+            engager(m, n, pack.name)
+
+    for l in lignes:
+        if not isinstance(l, dict):
+            raise ErreurAction("Ligne d'emprunt invalide.")
+        engager(article(texte(l, "nom", maxi=200)), qte(l), "")
+
+    nom_mission = mission.name if mission else SANS_MISSION
+    cibles = [["matLog", ""]]
+    if noms_packs:
+        cibles.append(["packs", ""])
+    for m, n, pack_nom in prepare:
+        creer_emprunt(m, n, nom_mission, utilisateur, pack=pack_nom)
+        note = (commentaire_de_pack(pack_nom, commentaire) if pack_nom
+                else commentaire)
+        journaux.materiel("SORTIE", m.nom_affiche, n, utilisateur, nom_mission,
+                          note, m.identite)
+        cibles.append(["materiel", m.name])
+
+    morceaux = []
+    if lignes:
+        morceaux.append("%d article(s)" % len(lignes))
+    if noms_packs:
+        morceaux.append("%d malette(s)" % len(noms_packs))
+    resume = " et ".join(morceaux) + " empruntés"
+    if mission:
+        resume += " pour « %s »" % mission.name
+    return resume, cibles
+
+
+@action("materiel.emprunt.retour")
+def materiel_emprunt_retour(utilisateur, p):
+    m = article(texte(p, "nom", maxi=200))
+    r = ligne(list(m.emprunts.all()), p, "ligne d'emprunt")
+    quantite, mission = r.qty, r.mission
+    r.delete()
+    journaux.materiel("RETOUR", m.nom_affiche, quantite, utilisateur, mission,
+                      identite=m.identite)
+    return ("Retour de %d × %s" % (quantite, m.nom_affiche),
+            [["materiel", m.name], ["matLog", ""]])
+
+
+# --------------------------------------------------------------------------
+# Restitution de mission, et consommation
+# --------------------------------------------------------------------------
+
+def _consommations(p, en_cours):
+    """Ce que la personne déclare avoir consommé, article par article.
+
+    Forme attendue : { "<article>": quantité }. Les quantités nulles sont
+    écartées ici plutôt que refusées : l'interface envoie une case par ligne
+    rendue, et la plupart restent à zéro.
+
+    Trois refus, parce que trois erreurs sont possibles et qu'aucune ne doit
+    passer en silence : consommer ce qui n'est pas un consommable, consommer un
+    article que la mission n'a pas emprunté, en consommer plus qu'il n'en était
+    sorti.
+    """
+    brut = p.get("consommes") or {}
+    if not isinstance(brut, dict):
+        raise ErreurAction("Quantités consommées invalides.")
+
+    sortis = {}
+    for r in en_cours:
+        sortis[r.material_id] = sortis.get(r.material_id, 0) + r.qty
+
+    consommes = {}
+    for cle, valeur in brut.items():
+        n = qte({"qty": valeur}, mini=0)
+        if not n:
+            continue
+        nom = str(cle)
+        m = Material.objects.filter(pk=nom).first()
+        if m is None or nom not in sortis:
+            raise ErreurAction(
+                "« %s » ne fait pas partie de ce qui est sorti pour cette "
+                "mission. Rechargez la page." % nom)
+        if not m.est_consommable:
+            raise ErreurAction(
+                "« %s » n'est pas un consommable : il revient au stock. "
+                "Seuls les articles de catégorie « %s » peuvent être déclarés "
+                "utilisés." % (m.designation, CATEGORIE_CONSOMMABLE))
+        if n > sortis[nom]:
+            raise ErreurAction(
+                "%d × « %s » déclarés utilisés, alors que %d seulement "
+                "étaient sortis." % (n, m.designation, sortis[nom]))
+        consommes[nom] = n
+    return consommes
+
+
+@action("materiel.mission.restituer")
+def materiel_mission_restituer(utilisateur, p):
+    """Rentre le matériel d'une mission, en déduisant ce qui a été consommé.
+
+    Un consommable déclaré utilisé ne revient pas au stock : sa ligne d'emprunt
+    se ferme comme les autres — la mission est bien terminée — mais la quantité
+    correspondante est retirée du stock, parce qu'elle n'existe plus. Le journal
+    porte alors deux lignes, CONSOMMÉ et RETOUR, et non une seule qui mentirait
+    sur ce qui est rentré.
+
+    Ce qui reste est réparti sur les lignes d'emprunt dans l'ordre : une mission
+    peut avoir sorti le même article en deux fois, et « 8 utilisés » ne dit pas
+    de quelle sortie ils venaient.
+    """
+    nom = texte(p, "mission", maxi=200)
+    en_cours = emprunts_ouverts_de_mission(nom)
+    if not en_cours:
+        raise ErreurAction("Aucun matériel à restituer pour « %s »." % nom)
+
+    consommes = _consommations(p, en_cours)
+    commentaire = texte(p, "commentaire", obligatoire=False, maxi=500)
+
+    quand = timezone.now()
+    cibles = [["matLog", ""]]
+    reste = dict(consommes)
+    for r in en_cours:
+        m = r.material
+        consomme = min(r.qty, reste.get(r.material_id, 0))
+        if consomme:
+            reste[r.material_id] -= consomme
+            m.qty -= consomme
+            m.save(update_fields=["qty"])
+            journaux.materiel("CONSOMMÉ", m.nom_affiche, consomme, utilisateur,
+                              nom, commentaire, m.identite)
+        r.returned_by, r.returned_at = utilisateur, quand
+        r.save(update_fields=["returned_by", "returned_at"])
+        if r.qty - consomme:
+            journaux.materiel("RETOUR", m.nom_affiche, r.qty - consomme,
+                              utilisateur, nom, identite=m.identite)
+        cibles.append(["materiel", r.material_id])
+
+    total = sum(consommes.values())
+    resume = "%d ligne(s) restituées pour « %s »" % (len(en_cours), nom)
+    if total:
+        resume += ", dont %d unité(s) consommées" % total
+    return resume, cibles

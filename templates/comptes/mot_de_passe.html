@@ -1,0 +1,36 @@
+{% extends "comptes/base.html" %}
+{% block titre %}Mot de passe · Heimdall{% endblock %}
+{% block contenu %}
+<h1>{% if impose %}Renouvellement obligatoire{% else %}Changer de mot de passe{% endif %}</h1>
+<p class="sous">
+  {% if impose %}Le mot de passe qui vous a été attribué doit être remplacé
+  avant d'accéder au stock.
+  {% else %}Choisissez un nouveau mot de passe.{% endif %}
+</p>
+
+{% if formulaire.errors %}
+<ul class="erreurs">
+  {% for erreur in formulaire.non_field_errors %}<li>{{ erreur }}</li>{% endfor %}
+  {% for champ in formulaire %}{% for erreur in champ.errors %}
+    <li>{{ erreur }}</li>
+  {% endfor %}{% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  {% for champ in formulaire %}
+  <div class="champ">
+    <label for="{{ champ.id_for_label }}">{{ champ.label }}</label>
+    {{ champ }}
+  </div>
+  {% endfor %}
+  <button type="submit">Enregistrer</button>
+</form>
+<div class="aide">
+  <ul>
+    <li>Au moins 8 caractères.</li>
+    <li>Pas uniquement des chiffres, ni trop proche de votre identifiant.</li>
+  </ul>
+</div>
+{% endblock %}

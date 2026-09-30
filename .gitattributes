@@ -1,0 +1,28 @@
+# Normalise les fins de ligne : LF dans le dépôt, CRLF à la sortie sous Windows.
+# Sans cela, chaque enregistrement depuis un éditeur Windows ferait apparaître le
+# fichier entier comme modifié.
+* text=auto
+
+# --- ce qui doit rester en LF, quoi qu'il arrive -----------------------------
+#
+# `core.autocrlf` vaut `true` sur ce poste : sans ces règles, un clone sous
+# Windows convertirait ces fichiers en CRLF. Ils sont ensuite copiés tels quels
+# dans une image Linux, où un `\r` traînant à la fin du shebang donne
+# « /bin/sh^M: no such file or directory » — un message qui ne dit pas du tout
+# ce qui se passe, et qui coûte une heure à qui ne connaît pas le piège.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.dockerfile    text eol=lf
+docker-compose.yml text eol=lf
+.dockerignore   text eol=lf
+.env.exemple    text eol=lf
+
+# Un script batch doit rester en CRLF, même sur un poste Unix.
+*.bat text eol=crlf
+
+# --- binaires : ni normalisation, ni diff textuelle -------------------------
+*.png binary
+*.ico binary
+*.xlsx binary
+*.db binary
+*.sqlite3 binary

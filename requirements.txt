@@ -1,9 +1,17 @@
 Django==5.2.17
 openpyxl==3.1.5
 
-# PostgreSQL. Inutile si vous restez sur SQLite en développement.
+# PostgreSQL. Inutile si vous restez sur SQLite en développement, mais installé
+# d'office dans l'image Docker, qui vise Postgres.
 psycopg[binary]==3.2.*
 
-# Serveur de production. Sous Windows, gunicorn ne fonctionne pas : utilisez
-# waitress, qui est là pour ça.
+# Sert les fichiers statiques depuis le processus Django : un seul conteneur
+# suffit, pas besoin de poser un nginx devant pour un dossier de CSS et d'images.
+whitenoise[brotli]==6.9.*
+
+# Serveur de production dans le conteneur (Linux).
+gunicorn==23.0.*
+
+# Serveur de production sous Windows, où gunicorn ne fonctionne pas. Superflu
+# dans l'image Docker ; le coût est de quelques centaines de kilo-octets.
 waitress==3.0.*

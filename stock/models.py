@@ -348,11 +348,17 @@ class MaterialReservation(models.Model):
     `pack` retient la malette d'où l'article est sorti, et reste vide pour un
     emprunt pris à l'unité. C'est ce qui permet de rendre une malette d'un
     geste, et de dire à l'écran laquelle est dehors.
+
+    `equipe` retient l'équipe de la mission à qui la ligne est attribuée, et
+    reste vide quand elle est rattachée à la mission sans plus de précision.
+    C'est un état modifiable : on rassemble le matériel de la mission, puis on
+    le répartit entre les équipes.
     """
 
     seq = models.IntegerField()
     qty = models.IntegerField("quantité")
     mission = models.CharField(max_length=200, default="—")
+    equipe = models.CharField("équipe", max_length=200, blank=True, default="")
     taken_by = models.CharField("pris par", max_length=120)
     returned_by = models.CharField("rendu par", max_length=120, null=True, blank=True)
     material = models.ForeignKey(Material, on_delete=models.CASCADE,
@@ -447,6 +453,51 @@ class Mission(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class Equipe(models.Model):
+    """Une équipe dans une mission : des personnes, et leur matériel.
+
+    Une mission se divise souvent en groupes qui partent chacun de leur côté —
+    « Équipe Nord », « Équipe Sud ». Sans elles, le matériel de la mission est
+    un tas unique et personne ne sait qui emporte quoi.
+
+    Les équipes appartiennent à leur mission : leur nom n'est unique qu'à
+    l'intérieur d'une mission, et deux missions peuvent chacune avoir leur
+    « Équipe A ». C'est pourquoi la clé est le couple, et pas le nom seul.
+
+    Les **membres** sont des comptes, en relation directe : une équipe est une
+    liste de personnes, et cette liste est un état courant, pas un historique.
+    Un compte supprimé quitte donc ses équipes, ce que la relation fait
+    d'elle-même.
+
+    Le **matériel**, lui, n'est pas une relation : c'est la colonne `equipe` des
+    emprunts, une chaîne. Même parti pris que pour `mission` et `pack` — une
+    équipe supprimée laisse des lignes de journal qui disent encore de quelle
+    équipe elles venaient, au lieu de perdre l'information.
+    """
+
+    mission = models.ForeignKey(Mission, on_delete=models.CASCADE,
+                                db_column="mission_name",
+                                related_name="equipes", db_index=True)
+    nom = models.CharField(max_length=200)
+    ordre = models.IntegerField(default=0)
+    membres = models.ManyToManyField("comptes.Compte", blank=True,
+                                     related_name="equipes",
+                                     db_table="stock_equipe_membres")
+
+    class Meta:
+        db_table = "stock_equipe"
+        ordering = ["mission_id", "ordre", "nom"]
+        constraints = [
+            models.UniqueConstraint(fields=["mission", "nom"],
+                                    name="equipe_unique_par_mission"),
+        ]
+        verbose_name = "équipe"
+        verbose_name_plural = "équipes"
+
+    def __str__(self):
+        return "%s · %s" % (self.mission_id, self.nom)
 
 
 class MissionTemplate(models.Model):

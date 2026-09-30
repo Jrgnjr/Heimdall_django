@@ -13,4 +13,6 @@ urlpatterns = [
     path("", views.accueil, name="accueil"),
     path("api/state", api.state, name="api_state"),
     path("api/action", api.action, name="api_action"),
+    # Sans session : interrogée par Docker et les répartiteurs de charge.
+    path("sante/", views.sante, name="sante"),
 ]

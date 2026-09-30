@@ -58,6 +58,8 @@ def mission_creer(utilisateur, p):
         existante.save(update_fields=["is_meta", "owner", "planned_date"])
 
     from .materiel import creer_emprunt
+    # Une mission créée avec un template n'a pas encore d'équipe : son matériel
+    # arrive donc au niveau de la mission, et se répartit ensuite.
     cibles = [["mission", nom]]
     for m, quantite in prepare:
         creer_emprunt(m, quantite, nom, utilisateur)

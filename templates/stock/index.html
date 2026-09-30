@@ -244,6 +244,7 @@ function seed(){
     dotations:{},
     matCat:"Toutes", matQuery:"", matSel:{}, matGroups:{}, matRes:{}, matLog:[], logFilter:"Tous", logQuery:"", logPage:0,
     missions:[], missionStatus:{}, templates:[], showArchived:false,
+    equipes:[], equipeEdit:null, membresEdit:null,
     packs:[], packOuverts:{}, packsReplies:false, packSel:{},
     // état transitoire des modales
     form:null, opMode:null, opForm:null,
@@ -257,7 +258,7 @@ function seed(){
 }
 
 /* données partagées entre tous les utilisateurs (serveur) vs préférences locales du poste */
-const SHARED = ["refs","cabinets","assignments","movements","materiel","matRes","matLog","missions","missionStatus","templates","packs","dotations"];
+const SHARED = ["refs","cabinets","assignments","movements","materiel","matRes","matLog","missions","missionStatus","templates","packs","equipes","dotations"];
 const PREFS  = ["page","brand","cabinet","matCat","logFilter","showArchived","stockPhonePageSize","stockMaterialPageSize"];
 const PREFS_KEY = "gestistock-prefs";
 const SERVER = location.protocol === "http:" || location.protocol === "https:";
@@ -380,7 +381,7 @@ function appliquerDelta(delta){
     if(delta.matRes[nom].length) S.matRes[nom] = delta.matRes[nom];
     else delete S.matRes[nom];
   });
-  ["missions","missionStatus","templates","packs","cabinets","assignments"].forEach(k=>{
+  ["missions","missionStatus","templates","packs","equipes","cabinets","assignments"].forEach(k=>{
     if(delta[k]!==undefined) S[k] = delta[k];
   });
   if(delta.movementsNouveaux) S.movements = delta.movementsNouveaux.concat(S.movements);
@@ -926,8 +927,20 @@ function depuisQuand(iso){
 function possessionsDe(compte){
   const lignes = [];
   (S.dotations[compte]||[]).forEach(d=>{
-    lignes.push({ genre:"dotation", libelle:d.article, detail:d.detail,
-                  qty:d.quantite, contexte:"Sac attribué à l'arrivée", iso:null });
+    // Une ligne de sac designe un exemplaire precis : son etiquette et son
+    // numero de serie sont ce qui distingue le portable de Compte-001 des deux
+    // autres identiques. Sans eux, « Dell Latitude 5450 » ne dit pas lequel.
+    const marques = [];
+    if(d.etiquette) marques.push("étiquette "+d.etiquette);
+    if(d.numeroSerie) marques.push("série "+d.numeroSerie);
+    if(d.manquant) marques.push("article supprimé du catalogue");
+    else if(!marques.length) marques.push("sans identifiant");
+    // Le detail saisi a la main vient apres l'identite, qui est la donnee sure.
+    if(d.detail) marques.push(d.detail);
+    lignes.push({ genre:"dotation", libelle:d.libelle||d.article,
+                  detail:marques.join(" · "), qty:d.quantite,
+                  contexte:"Sac attribué à l'arrivée", iso:null,
+                  manquant:!!d.manquant });
   });
   Object.keys(S.matRes).forEach(id=>{
     (S.matRes[id]||[]).forEach(r=>{
@@ -963,11 +976,18 @@ function carteCompte(compte, lignes){
   const dotations = lignes.filter(l=>l.genre==="dotation");
   const possessions = lignes.filter(l=>l.genre!=="dotation");
   const total = lignes.reduce((n,l)=>n+l.qty, 0);
+  /* Trois lignes, et l'identite a la sienne.
+     Elle etait auparavant collee au libelle sur la meme ligne, donc coupee par
+     l'ellipse des que le nom de l'article etait un peu long : « etiquette
+     PC-003 · serie 8KJ2NS5 » disparaissait precisement quand on en avait
+     besoin. La meme information existe deja sur sa propre ligne dans la table
+     du materiel ; c'est coherent de l'y mettre aussi. */
   const listeHtml = liste => liste.length ? `<div class="stack" style="border-radius:8px">${liste.map(l=>`
         <div style="padding:8px 11px;display:flex;align-items:center;gap:10px">
           <span class="badge ${GENRE_BADGE[l.genre]||"mut"}" style="flex:none">${esc(l.genre.toUpperCase())}</span>
           <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
-            <span style="font:500 11.5px/1.2 Archivo,sans-serif;color:#eef0f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.libelle)}${l.detail?`<span style="color:#8f96a2;font-weight:400"> · ${esc(l.detail)}</span>`:""}</span>
+            <span style="font:500 11.5px/1.2 Archivo,sans-serif;color:#eef0f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.libelle)}</span>
+            ${l.detail?`<span style="font:400 10.5px/1.25 Archivo,sans-serif;color:${l.manquant?"#ef8b83":"#9aa2af"};overflow-wrap:anywhere">${esc(l.detail)}</span>`:""}
             <span style="font:400 10px/1.2 Archivo,sans-serif;color:#6d7480;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.contexte)} · ${esc(depuisQuand(l.iso))}${l.iso?" ("+esc(dateCourte(l.iso))+")":""}</span>
           </span>
           <span style="flex:none;font:600 11px/1 Archivo,sans-serif;color:#f0b45a;font-variant-numeric:tabular-nums">${l.qty} u.</span>
@@ -1007,8 +1027,10 @@ async function confirmerDotation(){
 
 function ouvrirAttribution(materiel){
   if(!ADMIN || !COMPTES.length) return;
+  // La cle, pas le libelle : c'est cet exemplaire-la qu'on attribue, avec son
+  // etiquette et son numero de serie.
   setT({attributionEdit:{
-    article:materiel.name, compte:COMPTES[0], quantite:1, detail:""}});
+    article:materiel.id||materiel.name, compte:COMPTES[0], quantite:1, detail:""}});
 }
 
 async function confirmerAttribution(){
@@ -1031,12 +1053,27 @@ async function confirmerAttribution(){
     setT({attributionEdit:null});
 }
 
+/* Modifie une ligne du sac en cours d'edition, sans redessiner.
+
+   Le redessin etait ici, et il faisait sortir le curseur du champ a chaque
+   caractere tape : `render()` remplace tout le contenu de la page, et le
+   moteur ne remet le curseur que sur un element portant `data-k` — ce que ces
+   deux champs n'avaient pas.
+
+   Les deux corrections sont necessaires, et pour des raisons differentes :
+
+   - ne plus redessiner a chaque frappe, parce que rien a l'ecran ne depend de
+     ce qu'on tape ici. C'est le meme parti pris que les autres champs texte du
+     fichier (`f.etiquette=e.target.value`, sans render) ;
+   - donner quand meme un `data-k` a chaque champ, parce que la boucle de
+     synchronisation redessine toutes les 2,5 secondes des que quelqu'un
+     d'autre modifie quelque chose. Sans lui, le curseur sauterait encore,
+     juste moins souvent — et de façon d'autant plus deroutante. */
 function modifierLigneDotation(article, champ, valeur){
   const f = S.dotationEdit; if(!f) return;
   let ligne = f.lignes.find(l=>l.article===article);
   if(!ligne){ ligne={article, quantite:0, detail:""}; f.lignes.push(ligne); }
   ligne[champ] = champ==="quantite" ? Math.max(0, Number(valeur)||0) : valeur;
-  render();
 }
 
 function carteComptesAdmin(){
@@ -1300,7 +1337,7 @@ function carteConsommables(){
         <button class="btn-pri" style="padding:7px 12px;font-size:11px" ${on(()=>openLotForm())}>+ Exemplaires sériés</button>
       </div>
     </div>
-    <div style="padding:12px 16px;border-bottom:1px solid #23262d"><input class="inp" style="width:100%;font-size:12px" placeholder="Rechercher un consommable, une mission…" value="${esc(S.adminConsoQuery||"")}" ${oni(e=>setT({adminConsoQuery:e.target.value}))}></div>
+    <div style="padding:12px 16px;border-bottom:1px solid #23262d"><input class="inp" data-k="adminconsoq" style="width:100%;font-size:12px" placeholder="Rechercher un consommable, une mission…" value="${esc(S.adminConsoQuery||"")}" ${oni(e=>setT({adminConsoQuery:e.target.value}))}></div>
     <div style="display:grid;grid-template-columns:minmax(150px,2fr) 70px 86px 70px 84px 108px 86px;padding:0 16px;background:#191c22;border-bottom:1px solid #23262d;align-items:center">
       <div class="th" style="padding-left:0">ARTICLE · SÉRIE</div>
       <div class="th" style="text-align:right">STOCK</div>
@@ -1326,6 +1363,75 @@ function carteConsommables(){
     ${journal || '<div style="padding:24px 16px;color:#6d7480;font:400 12px Archivo,sans-serif">Aucune consommation enregistrée.</div>'}
     ${conso.length>60?`<div style="padding:10px 16px;font:400 11px Archivo,sans-serif;color:#6d7480">60 dernières sur ${conso.length} · le journal complet est dans l'onglet « Journal », filtre « CONSOMMÉ ».</div>`:""}
   </div>`;
+}
+
+/* ---------- equipes d'une mission ----------
+
+   Une mission se divise souvent en groupes qui partent chacun de leur cote.
+   Une equipe porte deux choses distinctes : ses membres, qui sont un etat
+   courant, et son materiel, qui est attribue ligne par ligne sur les emprunts.
+
+   Le nom d'une equipe n'est unique qu'a l'interieur de sa mission : deux
+   missions peuvent chacune avoir leur « Equipe A ». Toutes les recherches se
+   font donc sur le couple. */
+
+function equipesDe(mission){
+  if(!mission || mission===SANS_MISSION) return [];
+  return S.equipes.filter(e=>e.mission===mission)
+                  .sort((a,b)=>(a.ordre-b.ordre) || a.nom.localeCompare(b.nom));
+}
+
+function equipeExiste(mission, nom){
+  return equipesDe(mission).some(e=>e.nom===nom);
+}
+
+/* Le selecteur d'equipe des modales d'emprunt. Vide quand la mission n'a pas
+   d'equipes : proposer un choix a une seule option serait du bruit. */
+function selecteurEquipe(mission, choisie, poser){
+  const equipes = equipesDe(mission);
+  if(!equipes.length) return "";
+  return `
+  <label class="field">
+    <span class="klabel">ÉQUIPE <span style="color:#6d7480;font-weight:400;letter-spacing:0">(facultatif)</span></span>
+    <select class="inp" ${ong(e=>poser(e.target.value))}>
+      <option value=""${!choisie?" selected":""}>Toute la mission</option>
+      ${equipes.map(e=>`<option value="${esc(e.nom)}"${e.nom===choisie?" selected":""}>${esc(e.nom)}${e.membres.length?" · "+e.membres.length+" membre(s)":""}</option>`).join("")}
+    </select>
+  </label>`;
+}
+
+function ouvrirEquipe(mission, nom){
+  setT({equipeEdit:{mission, original:nom||null, valeur:nom||""}});
+}
+
+async function confirmerEquipe(){
+  const f = S.equipeEdit; if(!f) return;
+  const nom = (f.valeur||"").trim();
+  if(!nom) return;
+  const ok = f.original
+    ? await agir("mission.equipe.renommer",
+                 {mission:f.mission, nom:f.original, nouveauNom:nom})
+    : await agir("mission.equipe.creer", {mission:f.mission, nom});
+  if(ok) setT({equipeEdit:null});
+}
+
+function ouvrirMembres(mission, nom){
+  const equipe = equipesDe(mission).find(e=>e.nom===nom);
+  setT({membresEdit:{mission, nom, choisis:(equipe?equipe.membres:[]).slice()}});
+}
+
+async function confirmerMembres(){
+  const f = S.membresEdit; if(!f) return;
+  if(await agir("mission.equipe.membres",
+                {mission:f.mission, nom:f.nom, membres:f.choisis}))
+    setT({membresEdit:null});
+}
+
+function supprimerEquipe(mission, nom){
+  if(!confirm("Supprimer l'équipe « "+nom+" » de « "+mission+" » ?\n\n"
+    + "Son matériel déjà rendu garde son nom dans le journal. Ce qui est "
+    + "encore dehors doit d'abord être rendu ou déplacé.")) return;
+  agir("mission.equipe.supprimer", {mission, nom});
 }
 
 function chip(label,active,fn){
@@ -2163,7 +2269,7 @@ function render(){
             <button class="btn-pri" style="padding:7px 12px;font-size:11px" ${on(()=>openReception())}>+ Ajouter</button>
           </div>
         </div>
-        <div style="padding:12px 16px;border-bottom:1px solid #23262d"><input class="inp" style="width:100%;font-size:12px" placeholder="Rechercher un téléphone, une marque ou une référence…" value="${esc(S.adminPhoneQuery)}" ${oni(e=>setT({adminPhoneQuery:e.target.value,adminPhonePage:0}))}></div>
+        <div style="padding:12px 16px;border-bottom:1px solid #23262d"><input class="inp" data-k="adminphoneq" style="width:100%;font-size:12px" placeholder="Rechercher un téléphone, une marque ou une référence…" value="${esc(S.adminPhoneQuery)}" ${oni(e=>setT({adminPhoneQuery:e.target.value,adminPhonePage:0}))}></div>
         ${phonesPage.map(r=>`<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid #1f232a"><span style="flex:1;min-width:0;font:500 12px Archivo,sans-serif;color:#eef0f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.brand+" "+r.model)} <span style="color:#6d7480">· ${esc(r.mpn)}</span></span><span style="font:400 11px Archivo,sans-serif;color:#6d7480">${r.qty} u.</span><button class="btn-mini hred" ${on(()=>{if(confirm("Supprimer cette référence et ses variantes ?")) agir("telephone.supprimer",{refId:r.id});})}>Supprimer</button></div>`).join("") || '<div style="padding:24px 16px;color:#6d7480;font:400 12px Archivo,sans-serif">Aucun téléphone correspondant.</div>'}
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:10px 16px"><span style="font:400 11px Archivo,sans-serif;color:#6d7480">Page ${phonePage+1} / ${phonePages} · ${adminPhones.length} téléphone${adminPhones.length>1?"s":""}</span><button class="btn-mini hwhite" ${phonePage<=0?"disabled":""} ${on(()=>setT({adminPhonePage:phonePage-1}))}>Précédent</button><button class="btn-mini hwhite" ${phonePage>=phonePages-1?"disabled":""} ${on(()=>setT({adminPhonePage:phonePage+1}))}>Suivant</button></div>
       </div>
@@ -2172,13 +2278,13 @@ function render(){
           <div style="display:flex;flex-direction:column;gap:3px"><span style="font:600 13px Archivo,sans-serif;color:#eef0f4">Matériel</span><span style="font:400 11px Archivo,sans-serif;color:#6d7480">Réceptionner ou supprimer un article qui n'est plus emprunté.</span></div>
           <button class="btn-pri" style="padding:7px 12px;font-size:11px" ${on(()=>openMatReception())}>+ Ajouter</button>
         </div>
-        <div style="padding:12px 16px;border-bottom:1px solid #23262d"><input class="inp" style="width:100%;font-size:12px" placeholder="Rechercher un article, une catégorie ou une référence…" value="${esc(S.adminMaterialQuery)}" ${oni(e=>setT({adminMaterialQuery:e.target.value,adminMaterialPage:0}))}></div>
+        <div style="padding:12px 16px;border-bottom:1px solid #23262d"><input class="inp" data-k="adminmatq" style="width:100%;font-size:12px" placeholder="Rechercher un article, une catégorie ou une référence…" value="${esc(S.adminMaterialQuery)}" ${oni(e=>setT({adminMaterialQuery:e.target.value,adminMaterialPage:0}))}></div>
         ${materialsPage.map(m=>{const id=m.id||m.name; return `<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid #1f232a"><span style="flex:1;min-width:0;font:500 12px Archivo,sans-serif;color:#eef0f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.libelle||m.name)} <span style="color:#6d7480">· ${esc(m.cat)}</span></span><span style="font:400 11px Archivo,sans-serif;color:#6d7480">${m.qty} u.</span><button class="btn-mini hred" ${on(()=>{if(confirm("Supprimer cet article ?")) agir("materiel.supprimer",{nom:id});})}>Supprimer</button></div>`;}).join("") || '<div style="padding:24px 16px;color:#6d7480;font:400 12px Archivo,sans-serif">Aucun article correspondant.</div>'}
         <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:10px 16px"><span style="font:400 11px Archivo,sans-serif;color:#6d7480">Page ${materialPage+1} / ${materialPages} · ${adminMaterials.length} article${adminMaterials.length>1?"s":""}</span><button class="btn-mini hwhite" ${materialPage<=0?"disabled":""} ${on(()=>setT({adminMaterialPage:materialPage-1}))}>Précédent</button><button class="btn-mini hwhite" ${materialPage>=materialPages-1?"disabled":""} ${on(()=>setT({adminMaterialPage:materialPage+1}))}>Suivant</button></div>
       </div>
       <div class="card" style="overflow:hidden;display:${S.adminTab==="missions"?"block":"none"}">
         <div style="padding:14px 16px;border-bottom:1px solid #23262d;display:flex;flex-direction:column;gap:3px"><span style="font:600 13px Archivo,sans-serif;color:#eef0f4">Missions</span><span style="font:400 11px Archivo,sans-serif;color:#6d7480">Supprimer une mission qui ne possède plus de matériel affecté.</span></div>
-        <div style="padding:12px 16px;border-bottom:1px solid #23262d"><input class="inp" style="width:100%;font-size:12px" placeholder="Rechercher une mission…" value="${esc(S.adminMissionQuery)}" ${oni(e=>setT({adminMissionQuery:e.target.value,adminMissionPage:0}))}></div>
+        <div style="padding:12px 16px;border-bottom:1px solid #23262d"><input class="inp" data-k="adminmissionq" style="width:100%;font-size:12px" placeholder="Rechercher une mission…" value="${esc(S.adminMissionQuery)}" ${oni(e=>setT({adminMissionQuery:e.target.value,adminMissionPage:0}))}></div>
         ${(()=>{
           const query=(S.adminMissionQuery||"").trim().toLowerCase();
           const missions=S.missions.filter(m=>!query||m.name.toLowerCase().includes(query));
@@ -2201,8 +2307,10 @@ function render(){
     const apercuTemplate = selectedTemplate ? apercuTemplateHtml(selectedTemplate) : "";
     const creable = templateCreable(selectedTemplate);
     const derived = {};
-    Object.keys(S.matRes).forEach(name=>(S.matRes[name]||[]).forEach(r=>{
-      (derived[r.mission]=derived[r.mission]||[]).push({item:matLabel(name),detail:matDetail(name),materialId:name,qty:r.qty,returned:r.returned,by:r.by});
+    // `index` est le rang de la ligne dans les emprunts de SON article : c'est
+    // ce que `materiel.equipe.affecter` attend pour retrouver la ligne.
+    Object.keys(S.matRes).forEach(name=>(S.matRes[name]||[]).forEach((r,index)=>{
+      (derived[r.mission]=derived[r.mission]||[]).push({item:matLabel(name),detail:matDetail(name),materialId:name,index,equipe:r.equipe||"",qty:r.qty,returned:r.returned,by:r.by});
     }));
     const allNames = Array.from(new Set([...S.missions.map(m=>m.name), ...Object.keys(derived)]));
     const archivedCount = allNames.filter(missionArchived).length;
@@ -2223,8 +2331,10 @@ function render(){
       const stCls = st==="EN COURS" ? "info" : st==="TERMINÉE" ? "ok" : "mut";
       const archived = missionArchived(name);
       const items = derived[name]||[];
-      const itemsHtml = items.map((it,index)=>{
-        const checkKey = name+"|"+index;
+      const equipes = equipesDe(name);
+
+      const ligneHtml = (it,rang)=>{
+        const checkKey = name+"|"+rang;
         const checked = !!S.missionChecks[checkKey];
         return `
         <div style="background:#191c22;padding:8px 11px;display:flex;align-items:center;gap:10px;opacity:${it.returned?".6":"1"}">
@@ -2232,14 +2342,53 @@ function render(){
             const checks=Object.assign({},S.missionChecks,{[checkKey]:!checked});
             setT({missionChecks:checks});
           })} style="width:15px;height:15px;flex:none;accent-color:#2A6BF2;cursor:pointer">
-          <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+          <span style="display:flex;flex-direction:column;gap:2px;min-width:0;flex:1">
             <span style="font:400 11.5px/1.2 Archivo,sans-serif;color:#c3c9d3;${checked?"text-decoration:line-through;opacity:.65":""}">${esc(it.item+" · pris par "+(it.by||"non précisé"))}</span>
             ${it.detail?`<span style="font:400 10.5px/1.2 Archivo,sans-serif;color:#9aa2af;${checked?"opacity:.65":""}">${esc(it.detail)}</span>`:""}
             ${it.returned?`<span style="font:400 10px/1.2 Archivo,sans-serif;color:#5fc79a">Rendu le ${esc(dateComplete(it.returned.iso))} par ${esc(it.returned.by)}</span>`:""}
           </span>
-          <span style="font:600 11px/1 Archivo,sans-serif;color:${it.returned?"#5fc79a":"#f0b45a"}">${it.qty} u.</span>
+          ${(!it.returned && equipes.length)?`<select class="inp" style="flex:none;width:118px;padding:4px 6px;font-size:10.5px" aria-label="Équipe de ${esc(it.item)}"
+            ${ong(e=>agir("materiel.equipe.affecter",{nom:it.materialId, index:it.index, equipe:e.target.value}))}>
+            <option value=""${it.equipe?"":" selected"}>— mission</option>
+            ${equipes.map(e=>`<option value="${esc(e.nom)}"${e.nom===it.equipe?" selected":""}>${esc(e.nom)}</option>`).join("")}
+          </select>`:""}
+          <span style="font:600 11px/1 Archivo,sans-serif;color:${it.returned?"#5fc79a":"#f0b45a"};flex:none">${it.qty} u.</span>
         </div>`;
-      }).join("");
+      };
+
+      /* Un groupe par equipe, plus un pour ce qui n'en a pas.
+         Le groupe « sans equipe » n'apparait que s'il contient quelque chose :
+         sur une mission sans equipes, il serait le seul et son titre
+         n'apprendrait rien. */
+      const groupes = [];
+      equipes.forEach(e=>{
+        groupes.push({nom:e.nom, membres:e.membres,
+                      lignes:items.filter(it=>it.equipe===e.nom)});
+      });
+      const orphelines = items.filter(it=>!it.equipe || !equipeExiste(name, it.equipe));
+      if(orphelines.length && equipes.length)
+        groupes.push({nom:"", membres:[], lignes:orphelines});
+
+      let rang = 0;
+      const itemsHtml = !equipes.length
+        ? items.map(it=>ligneHtml(it, rang++)).join("")
+        : groupes.map(g=>{
+            const dehors = g.lignes.filter(it=>!it.returned);
+            const total = dehors.reduce((n,it)=>n+it.qty, 0);
+            return `
+            <div style="background:#15181d;padding:9px 11px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-bottom:1px solid #23262d">
+              <span class="klabel" style="color:${g.nom?"#8fb4ff":"#6d7480"}">${g.nom?esc(g.nom.toUpperCase()):"SANS ÉQUIPE"}</span>
+              ${total?`<span class="badge warn">${total} u.</span>`:'<span class="badge mut">VIDE</span>'}
+              ${g.nom?`<span style="font:400 10.5px/1.3 Archivo,sans-serif;color:#767d8a;min-width:0;overflow-wrap:anywhere">${g.membres.length?esc(g.membres.join(", ")):"aucun membre"}</span>`:""}
+              ${g.nom?`<span style="margin-left:auto;display:flex;gap:5px;flex-wrap:wrap">
+                <button class="btn-mini hwhite" ${on(()=>ouvrirMembres(name, g.nom))}>Membres</button>
+                ${dehors.length?`<button class="btn-mini hblue" ${on(()=>setT({releaseForm:{mission:name, equipe:g.nom, by:"", consommes:{}, commentaire:""}}))}>Libérer</button>`:""}
+                ${ADMIN?`<button class="btn-mini hwhite" ${on(()=>ouvrirEquipe(name, g.nom))}>Renommer</button>`:""}
+                ${ADMIN?`<button class="btn-mini hred" ${dehors.length?'disabled title="Rendez ou déplacez son matériel d\'abord"':''} ${on(()=>supprimerEquipe(name, g.nom))}>Supprimer</button>`:""}
+              </span>`:""}
+            </div>
+            ${g.lignes.length?g.lignes.map(it=>ligneHtml(it, rang++)).join(""):'<div style="background:#191c22;padding:9px 11px;font:400 11px Archivo,sans-serif;color:#6d7480">Rien d\'attribué.</div>'}`;
+          }).join("");
       return `
       <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px${archived?";opacity:.65":""}">
         <div style="display:flex;align-items:center;gap:10px">
@@ -2255,12 +2404,13 @@ function render(){
           })}>${st}</button>
           <button class="btn-mini hblue" ${on(()=>setT({editMission:{name, owner:meta.owner||"", date:meta.date||""}}))}>Modifier</button>
           ${items.some(it=>!it.returned)?`<button class="btn-mini hblue" ${on(()=>setT({releaseForm:{mission:name, by:"", consommes:{}, commentaire:""}}))}>Libérer tout</button>`:""}
+          ${ADMIN?`<button class="btn-mini hwhite" ${on(()=>ouvrirEquipe(name, null))}>+ Équipe</button>`:""}
           ${!archived && st==="TERMINÉE"?`<button class="btn-mini hblue" ${on(()=>setMissionArchived(name, meta, true))}>Archiver</button>`:""}
           ${archived?`<button class="btn-mini hblue" ${on(()=>setMissionArchived(name, meta, false))}>Désarchiver</button>`:""}
           ${!items.length?`<button class="btn-mini hred" ${on(()=>agir("mission.supprimer",{nom:name}))}>Supprimer</button>`:""}
         </div>
-        ${!items.length?'<span style="font:400 11.5px/1.3 Archivo,sans-serif;color:#6d7480">Aucun matériel affecté</span>':""}
-        ${items.length?`<div class="stack" style="border-radius:8px">${itemsHtml}</div>`:""}
+        ${(!items.length && !equipes.length)?'<span style="font:400 11.5px/1.3 Archivo,sans-serif;color:#6d7480">Aucun matériel affecté</span>':""}
+        ${(items.length || equipes.length)?`<div class="stack" style="border-radius:8px">${itemsHtml}</div>`:""}
       </div>`;
     }).join("");
 
@@ -2615,6 +2765,7 @@ function render(){
             <span class="klabel">PRIS PAR</span>
             <span style="font:500 13px/1.2 Archivo,sans-serif;color:#e7e9ee">${esc(OPERATOR)}</span>
           </div>
+          ${selecteurEquipe((f.mission||"").trim(), f.equipe||"", v=>{f.equipe=v; render();})}
           <label class="field">
             <span class="klabel">COMMENTAIRE <span style="color:#6d7480;font-weight:400;letter-spacing:0">(facultatif)</span></span>
             <textarea class="inp" data-k="rescomment" maxlength="500" rows="3" placeholder="Pourquoi ce matériel sort-il ?" ${oni(e=>{f.commentaire=e.target.value;})}>${esc(f.commentaire||"")}</textarea>
@@ -2627,7 +2778,7 @@ function render(){
           <button class="btn-pri${blocked?' off':''}" style="padding:9px 16px" ${on(async ()=>{
             if(blocked) return;
             const n2 = Math.max(1, Number(f.qty)||1);
-            if(await agir("materiel.emprunt", { nom:f.name, qty:n2, mission:(f.mission||"").trim(), commentaire:(f.commentaire||"").trim() })){
+            if(await agir("materiel.emprunt", { nom:f.name, qty:n2, mission:(f.mission||"").trim(), equipe:f.equipe||"", commentaire:(f.commentaire||"").trim() })){
               setT({ matResForm:null });
             }
           })}>Emprunter</button>
@@ -2704,6 +2855,7 @@ function render(){
             <span class="klabel">ARTICLES · ${Object.keys(b.qtys).length}</span>
             <div class="stack">${itemsHtml}</div>
           </div>` : ""}
+          ${selecteurEquipe((b.mission||"").trim(), b.equipe||"", v=>{b.equipe=v; render();})}
           <label class="field">
             <span class="klabel">COMMENTAIRE <span style="color:#6d7480;font-weight:400;letter-spacing:0">(facultatif)</span></span>
             <textarea class="inp" data-k="bcomment" maxlength="500" rows="3" placeholder="Commentaire commun aux sorties" ${oni(e=>{b.commentaire=e.target.value;})}>${esc(b.commentaire||"")}</textarea>
@@ -2764,7 +2916,7 @@ function render(){
       <div class="modal" style="width:${consommables.length?"500px":"400px"};max-height:86vh">
         <div class="modal-head">
           <span class="modal-title">Restitution du matériel</span>
-          <span class="modal-sub">${esc(f.mission)}</span>
+          <span class="modal-sub">${esc(f.mission)}${f.equipe?" · équipe "+esc(f.equipe):""}</span>
         </div>
         <div class="modal-body" style="gap:12px;overflow:auto">
           <div class="field">
@@ -2945,24 +3097,37 @@ function render(){
   if(S.dotationEdit){
     const f = S.dotationEdit;
     const recherche = (f.query||"").trim().toLowerCase();
-    const noms = new Set(f.lignes.map(l=>l.article));
+    /* Le sac designe des exemplaires, pas des libelles : la cle de l'article
+       (`m.id`) est donc l'identifiant partout ici. S'en tenir a `m.name`
+       confondrait les trois portables identiques, et l'ecran ne pourrait plus
+       dire lequel est dans quel sac. */
+    const cle = m => m.id || m.name;
     const articles = S.materiel.filter(m=>!recherche
       || (m.name+" "+m.cat+" "+(m.etiquette||"")+" "+(m.numeroSerie||"")).toLowerCase().includes(recherche));
     f.lignes.forEach(l=>{
-      if(!articles.some(m=>m.name===l.article) && (!recherche
+      if(!articles.some(m=>cle(m)===l.article) && (!recherche
           || l.article.toLowerCase().includes(recherche)))
-        articles.push({name:l.article, cat:"Déjà attribué"});
+        articles.push({id:l.article, name:l.article, cat:"Article supprimé",
+                       manquant:true});
     });
     const lignesDotation = articles.map(m=>{
-      const ligne = f.lignes.find(l=>l.article===m.name);
+      const k = cle(m);
+      const ligne = f.lignes.find(l=>l.article===k);
       const quantite = ligne ? ligne.quantite : 0;
+      // Ce qui distingue cet exemplaire de ses jumeaux, sous son nom : c'est
+      // la seule facon de choisir le bon dans une liste d'homonymes.
+      const marques = [];
+      if(m.etiquette) marques.push("étiquette "+m.etiquette);
+      if(m.numeroSerie) marques.push("série "+m.numeroSerie);
+      const identite = marques.join(" · ");
       return `<div style="display:grid;grid-template-columns:minmax(150px,2fr) minmax(82px,1fr) 74px;gap:9px;padding:9px 11px;align-items:center;border-bottom:1px solid #1f232a">
         <span style="min-width:0;display:flex;flex-direction:column;gap:2px">
-          <span style="font:500 11.5px/1.2 Archivo,sans-serif;color:#eef0f4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</span>
-          <span style="font:400 10px/1.2 Archivo,sans-serif;color:#6d7480">${esc(m.cat)}</span>
+          <span style="font:500 11.5px/1.2 Archivo,sans-serif;color:${m.manquant?"#ef8b83":"#eef0f4"};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</span>
+          ${identite?`<span style="font:400 10px/1.2 Archivo,sans-serif;color:#9aa2af;overflow-wrap:anywhere">${esc(identite)}</span>`:""}
+          <span style="font:400 10px/1.2 Archivo,sans-serif;color:#6d7480">${esc(m.cat)}${identite||m.manquant?"":" · sans identifiant"}</span>
         </span>
-        <input class="inp" type="text" placeholder="Détail" value="${esc(ligne?ligne.detail:"")}" ${oni(e=>modifierLigneDotation(m.name,"detail",e.target.value))}>
-        <input class="inp" type="number" min="0" style="padding:7px 8px" value="${quantite||""}" placeholder="0" ${oni(e=>modifierLigneDotation(m.name,"quantite",e.target.value))}>
+        <input class="inp" data-k="dot-det-${esc(k)}" type="text" placeholder="Détail" value="${esc(ligne?ligne.detail:"")}" ${oni(e=>modifierLigneDotation(k,"detail",e.target.value))}>
+        <input class="inp" data-k="dot-qte-${esc(k)}" type="number" min="0" style="padding:7px 8px" value="${quantite||""}" placeholder="0" ${oni(e=>modifierLigneDotation(k,"quantite",e.target.value))}>
       </div>`;
     }).join("");
     modals += `
@@ -2976,7 +3141,7 @@ function render(){
           <div class="field">
             <div style="display:flex;align-items:center;gap:9px">
               <span class="klabel">CATALOGUE DU MATÉRIEL</span>
-              <input class="inp" data-k="dotationq" style="margin-left:auto;flex:0 1 260px;min-width:150px;padding:7px 9px;font-size:11.5px" placeholder="Rechercher un article…" value="${esc(f.query)}" ${oni(e=>{f.query=e.target.value;})}>
+              <input class="inp" data-k="dotationq" style="margin-left:auto;flex:0 1 260px;min-width:150px;padding:7px 9px;font-size:11.5px" placeholder="Rechercher un article…" value="${esc(f.query)}" ${oni(e=>{f.query=e.target.value; render();})}>
             </div>
             <div style="display:grid;grid-template-columns:minmax(150px,2fr) minmax(82px,1fr) 74px;padding:8px 11px;background:#191c22;border:1px solid #23262d;border-bottom:0;border-radius:8px 8px 0 0">
               <span class="th" style="padding:0">ARTICLE</span><span class="th" style="padding:0">DÉTAIL</span><span class="th" style="padding:0;text-align:right">QUANTITÉ</span>
@@ -3000,7 +3165,7 @@ function render(){
       <div class="modal" style="width:430px;max-width:100%">
         <div class="modal-head">
           <span class="modal-title">Attribuer au sac</span>
-          <span class="modal-sub">${esc(f.article)} · depuis le stock matériel</span>
+          <span class="modal-sub">${esc(matLabel(f.article))}${matDetail(f.article)?" · "+esc(matDetail(f.article)):""} · depuis le stock matériel</span>
         </div>
         <div class="modal-body">
           <label class="field">
@@ -3172,6 +3337,7 @@ function render(){
               <span class="klabel">CONTENU · ${retenues.length} retenu(s)</span>
               <div class="stack">${lignesHtml}</div>
             </div>
+            ${selecteurEquipe((b.mission||"").trim(), b.equipe||"", v=>{b.equipe=v; render();})}
             <label class="field">
               <span class="klabel">COMMENTAIRE <span style="color:#6d7480;font-weight:400;letter-spacing:0">(facultatif)</span></span>
               <textarea class="inp" data-k="pkcomment" maxlength="500" rows="2" placeholder="Commentaire commun aux sorties" ${oni(e=>{ b.commentaire=e.target.value; })}>${esc(b.commentaire||"")}</textarea>
@@ -3299,6 +3465,85 @@ function render(){
           ${attendus?`<button class="btn-mini hwhite" style="margin-right:auto" ${on(()=>sansNumeroDeSerie())}>Ces exemplaires n'ont pas de numéro</button>`:""}
           <button class="btn-sec" style="padding:9px 14px" ${on(()=>setT({lotForm:null, matReceptForm:f.retour||null}))}>${f.retour?"Retour":"Annuler"}</button>
           <button class="btn-pri${pret?'':' off'}" style="padding:9px 16px" ${on(()=>{ if(pret) confirmLotForm(); })}>Enregistrer ${series.length||""}</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /* Creer ou renommer une equipe. Un seul champ : son nom n'a besoin d'etre
+     unique que dans sa mission, et le serveur le verifie. */
+  if(S.equipeEdit){
+    const f = S.equipeEdit;
+    const nomVoulu = (f.valeur||"").trim();
+    const pris = nomVoulu && nomVoulu!==f.original
+      && equipesDe(f.mission).some(e=>e.nom.toLowerCase()===nomVoulu.toLowerCase());
+    const pret = nomVoulu.length>0 && !pris;
+    modals += `
+    <div class="modal-back">
+      <div class="modal" style="width:400px">
+        <div class="modal-head">
+          <span class="modal-title">${f.original?"Renommer l'équipe":"Nouvelle équipe"}</span>
+          <span class="modal-sub">${esc(f.mission)}</span>
+        </div>
+        <div class="modal-body">
+          <label class="field">
+            <span class="klabel">NOM DE L'ÉQUIPE</span>
+            <input class="inp" data-k="equipenom" maxlength="200" placeholder="Équipe Nord" value="${esc(f.valeur||"")}" ${oni(e=>{f.valeur=e.target.value; render();})}>
+          </label>
+          ${pris?'<span style="font:400 11px/1.3 Archivo,sans-serif;color:#ef8b83">Une équipe de ce nom existe déjà dans cette mission.</span>':""}
+          <span style="font:400 11px/1.3 Archivo,sans-serif;color:#6d7480">${f.original?"Le matériel déjà attribué suit le nouveau nom.":"Le matériel s\'y attribue ensuite, à l\'emprunt ou en le déplaçant depuis la mission."}</span>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-sec" style="padding:9px 14px" ${on(()=>setT({equipeEdit:null}))}>Annuler</button>
+          <button class="btn-pri${pret?'':' off'}" style="padding:9px 16px" ${on(()=>{ if(pret) confirmerEquipe(); })}>${f.original?"Renommer":"Créer"}</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /* Composer les membres d'une equipe. La liste est remplacee en entier : on
+     coche qui en fait partie aujourd'hui. */
+  if(S.membresEdit){
+    const f = S.membresEdit;
+    const dans = new Set(f.choisis);
+    // Les autres equipes de la mission, pour signaler qui est deja pris
+    // ailleurs — ce n'est pas interdit, mais c'est bon a savoir.
+    const ailleurs = {};
+    equipesDe(f.mission).forEach(e=>{
+      if(e.nom===f.nom) return;
+      e.membres.forEach(m=>{ (ailleurs[m]=ailleurs[m]||[]).push(e.nom); });
+    });
+    const listeHtml = COMPTES.map(c=>{
+      const coche = dans.has(c);
+      return `
+      <button ${on(()=>{
+        f.choisis = dans.has(c) ? f.choisis.filter(x=>x!==c) : f.choisis.concat([c]);
+        render();
+      })} style="width:100%;padding:8px 11px;background:transparent;border:0;border-bottom:1px solid #1f232a;display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer">
+        <span style="width:15px;height:15px;flex:none;border-radius:4px;display:grid;place-items:center;font:600 9px/1 Archivo,sans-serif;${coche?"background:#2A6BF2;border:1px solid #2A6BF2;color:#fff":"background:#191c22;border:1px solid #343a45;color:transparent"}">${coche?"✓":""}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font:500 11.5px/1.2 Archivo,sans-serif;color:#dfe3ea">${esc(c)}${c===OPERATOR?'<span style="color:#6d7480;font-weight:400"> · vous</span>':""}</span>
+          ${ailleurs[c]?`<span style="font:400 10px/1.2 Archivo,sans-serif;color:#f0b45a">déjà dans ${esc(ailleurs[c].join(", "))}</span>`:""}
+        </span>
+      </button>`;
+    }).join("");
+    modals += `
+    <div class="modal-back">
+      <div class="modal" style="width:430px;max-height:86vh">
+        <div class="modal-head">
+          <span class="modal-title">Membres de « ${esc(f.nom)} »</span>
+          <span class="modal-sub">${esc(f.mission)} · ${f.choisis.length} retenu(s)</span>
+        </div>
+        <div class="modal-body" style="overflow:auto">
+          <div class="field" style="gap:8px">
+            <span class="klabel">COMPTES</span>
+            <div class="stack" style="max-height:340px;overflow:auto">${listeHtml||'<div style="padding:16px 11px;font:400 11px Archivo,sans-serif;color:#6d7480">Aucun compte à proposer.</div>'}</div>
+            <span style="font:400 11px/1.3 Archivo,sans-serif;color:#6d7480">La composition est l\'état du jour : elle remplace la précédente, et rien n\'en est conservé.</span>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-sec" style="padding:9px 14px" ${on(()=>setT({membresEdit:null}))}>Annuler</button>
+          <button class="btn-pri" style="padding:9px 16px" ${on(confirmerMembres)}>Enregistrer</button>
         </div>
       </div>
     </div>`;
@@ -3535,6 +3780,7 @@ async function confirmPackBorrow(){
   // Envoyer `lignes` même pour une malette entière : le serveur recevrait
   // sinon « tout le contenu », qui peut avoir changé depuis l'affichage.
   if(await agir("pack.emprunt", { pack:b.pack, mission:(b.mission||"").trim(),
+                                  equipe:b.equipe||"",
                                   commentaire:(b.commentaire||"").trim(), lignes })){
     setT({ packBorrow:null });
   }
@@ -3558,6 +3804,7 @@ async function confirmBatch(){
     nom:nm, qty:Math.max(1, Number(b.qtys[nm])||1)
   }));
   if(await agir("materiel.emprunt.groupe", { mission:(b.mission||"").trim(),
+                                             equipe:b.equipe||"",
                                              lignes, packs:b.packs||[],
                                              commentaire:(b.commentaire||"").trim() })){
     setT({ matBatch:null, matSel:{}, packSel:{} });
@@ -3578,8 +3825,13 @@ async function confirmRelease(){
     const n = Math.min(l.qty, Math.max(0, Number(f.consommes[id])||0));
     if(n) consommes[id] = n;
   });
-  if(await agir("materiel.mission.restituer", { mission:f.mission, consommes,
-                                                commentaire:(f.commentaire||"").trim() })){
+  const demande = { mission:f.mission, consommes,
+                    commentaire:(f.commentaire||"").trim() };
+  // `equipe` n'est envoyee que si la restitution vise une equipe : absente, le
+  // serveur rend toute la mission — ce qui n'est pas la meme demande qu'une
+  // chaine vide, laquelle rend ce qui n'a pas d'equipe.
+  if(f.equipe) demande.equipe = f.equipe;
+  if(await agir("materiel.mission.restituer", demande)){
     setT({ releaseForm:null });
   }
 }

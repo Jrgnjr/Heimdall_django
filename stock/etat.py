@@ -20,6 +20,7 @@ from .models import (Cabinet, MaterialLog, MaterialReservation, Material,
                      Mission, MissionTemplate, Operation, Pack, PhoneModel,
                      PhoneMovement, SlotAssignment, Version)
 from .services.champs import iso
+from .services.equipes import equipes_json
 
 # Au-delà, une session trop en retard reçoit l'état complet : garder
 # l'historique de toutes les opérations depuis toujours pour un onglet resté
@@ -55,7 +56,8 @@ def _mission_json(m):
 
 def _emprunt_json(r):
     entree = {"qty": r.qty, "mission": r.mission, "by": r.taken_by,
-              "iso": iso(r.taken_at), "pack": r.pack or ""}
+              "iso": iso(r.taken_at), "pack": r.pack or "",
+              "equipe": r.equipe or ""}
     if r.returned_by or r.returned_at:
         entree["returned"] = {"by": r.returned_by or "",
                               "iso": iso(r.returned_at)}
@@ -168,6 +170,7 @@ def charger():
         "templates": [_template_json(t) for t in
                       MissionTemplate.objects.all().prefetch_related("items")],
         "packs": _packs_json(),
+        "equipes": equipes_json(),
     }
     return v, etat
 
@@ -198,7 +201,7 @@ def charger_delta(depuis):
     import json
 
     refs_touchees, materiels_touches, missions_touchees = set(), set(), set()
-    cabinets = assignments = templates = packs = False
+    cabinets = assignments = templates = packs = equipes = False
     for op in operations:
         try:
             cibles = json.loads(op.cibles or "[]")
@@ -222,6 +225,8 @@ def charger_delta(depuis):
                 templates = True
             elif genre == "packs":
                 packs = True
+            elif genre == "equipes":
+                equipes = True
 
     delta = {}
 
@@ -268,6 +273,9 @@ def charger_delta(depuis):
                               MissionTemplate.objects.all().prefetch_related("items")]
     if packs:
         delta["packs"] = _packs_json()
+    # Les équipes suivent les missions : renvoyées entières, comme elles.
+    if equipes or missions_touchees:
+        delta["equipes"] = equipes_json()
 
     # Les journaux s'empilent par le haut : les N lignes de plus petit rang sont
     # exactement les N plus récentes.

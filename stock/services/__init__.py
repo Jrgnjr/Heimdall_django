@@ -51,6 +51,16 @@ ACTIONS_ADMINISTRATEUR = {
     "mission.template.creer",
     "mission.template.modifier",
     "mission.template.supprimer",
+    # Le sac de dotation engage ce qu'une personne détient durablement : le
+    # composer relève de l'encadrement, pas du travail quotidien.
+    "compte.dotations",
+    # Composer les équipes d'une mission, c'est de l'organisation. Y répartir
+    # le matériel, non : `materiel.equipe.affecter` reste ouvert à tous, comme
+    # emprunter.
+    "mission.equipe.creer",
+    "mission.equipe.renommer",
+    "mission.equipe.supprimer",
+    "mission.equipe.membres",
 }
 
 
@@ -71,8 +81,8 @@ def charger():
     tête de fichier : les modules d'action importent les modèles, qui ne sont
     pas encore chargés au moment où ce paquet l'est.
     """
-    from . import (armoires, materiel, missions, packs,  # noqa: F401
-                   telephones, templates)
+    from . import (armoires, dotations, equipes, materiel,  # noqa: F401
+                   missions, packs, telephones, templates)
 
 
 def executer(nom, utilisateur, params, administrateur=False):

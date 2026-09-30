@@ -81,20 +81,33 @@ def creer_article(nom, cat, affect, quantite, etiquette="", numero_serie=""):
         etiquette=etiquette or "", numero_serie=numero_serie or "")
 
 
-def creer_emprunt(m, quantite, mission, par_qui, pack=""):
-    """`pack` retient la malette d'où l'article est sorti, ou reste vide."""
+def creer_emprunt(m, quantite, mission, par_qui, pack="", equipe=""):
+    """`pack` retient la malette d'où l'article est sorti, ou reste vide.
+
+    `equipe` retient l'équipe de la mission à qui la ligne est attribuée. Vide
+    signifie « rattaché à la mission sans plus de précision » — le cas des
+    missions sans équipes, et de tout ce qui existait avant elles.
+    """
     seq = MaterialReservation.objects.filter(material=m).aggregate(m=Max("seq"))["m"]
     seq = -1 if seq is None else seq
     return MaterialReservation.objects.create(
         material=m, seq=seq + 1, qty=quantite, mission=mission,
         taken_by=par_qui, returned_by=None, taken_at=timezone.now(),
-        returned_at=None, pack=pack or "")
+        returned_at=None, pack=pack or "", equipe=equipe or "")
 
 
-def emprunts_ouverts_de_mission(nom):
-    return list(MaterialReservation.objects.filter(mission=nom,
-                                                   returned_by__isnull=True)
-                .order_by("material_id", "seq"))
+def emprunts_ouverts_de_mission(nom, equipe=None):
+    """Ce qu'une mission détient encore, éventuellement d'une seule équipe.
+
+    `equipe=None` prend toute la mission ; une chaîne vide prend ce qui n'est
+    attribué à aucune équipe. Les deux sont des demandes légitimes et
+    différentes, d'où le `None` plutôt qu'un défaut à chaîne vide.
+    """
+    lignes = MaterialReservation.objects.filter(mission=nom,
+                                                returned_by__isnull=True)
+    if equipe is not None:
+        lignes = lignes.filter(equipe=equipe)
+    return list(lignes.order_by("material_id", "seq"))
 
 
 def mission_existante(nom):
@@ -299,12 +312,16 @@ def materiel_emprunt(utilisateur, p):
             "Stock insuffisant : %d unité(s) disponible(s) de « %s » hors "
             "emprunts en cours, %d demandée(s)." % (libre, m.nom_affiche, n))
 
+    from .equipes import equipe_demandee
     nom_mission = mission.name if mission else SANS_MISSION
-    creer_emprunt(m, n, nom_mission, utilisateur)
+    equipe = equipe_demandee(p, nom_mission)
+    creer_emprunt(m, n, nom_mission, utilisateur, equipe=equipe)
     journaux.materiel("SORTIE", m.nom_affiche, n, utilisateur, nom_mission,
                       commentaire, m.identite)
     resume = ("Emprunt de %d × %s" % (n, m.nom_affiche) if mission is None else
               "Emprunt de %d × %s pour « %s »" % (n, m.nom_affiche, mission.name))
+    if equipe:
+        resume += " (%s)" % equipe
     return resume, [["materiel", m.name], ["matLog", ""]]
 
 
@@ -372,12 +389,17 @@ def materiel_emprunt_groupe(utilisateur, p):
             raise ErreurAction("Ligne d'emprunt invalide.")
         engager(article(texte(l, "nom", maxi=200)), qte(l), "")
 
+    from .equipes import equipe_demandee
     nom_mission = mission.name if mission else SANS_MISSION
+    # Une seule équipe pour tout le panier : c'est un chargement, et le
+    # répartir ligne à ligne se fait ensuite, depuis l'écran des missions.
+    equipe = equipe_demandee(p, nom_mission)
     cibles = [["matLog", ""]]
     if noms_packs:
         cibles.append(["packs", ""])
     for m, n, pack_nom in prepare:
-        creer_emprunt(m, n, nom_mission, utilisateur, pack=pack_nom)
+        creer_emprunt(m, n, nom_mission, utilisateur, pack=pack_nom,
+                      equipe=equipe)
         note = (commentaire_de_pack(pack_nom, commentaire) if pack_nom
                 else commentaire)
         journaux.materiel("SORTIE", m.nom_affiche, n, utilisateur, nom_mission,
@@ -392,6 +414,8 @@ def materiel_emprunt_groupe(utilisateur, p):
     resume = " et ".join(morceaux) + " empruntés"
     if mission:
         resume += " pour « %s »" % mission.name
+        if equipe:
+            resume += " (%s)" % equipe
     return resume, cibles
 
 
@@ -470,8 +494,16 @@ def materiel_mission_restituer(utilisateur, p):
     de quelle sortie ils venaient.
     """
     nom = texte(p, "mission", maxi=200)
-    en_cours = emprunts_ouverts_de_mission(nom)
+    # `equipe` absente rend toute la mission ; présente, seulement cette
+    # équipe. Une chaîne vide explicite rend ce qui n'a pas d'équipe.
+    equipe = p.get("equipe")
+    equipe = None if equipe is None else texte({"e": equipe}, "e",
+                                               obligatoire=False)
+    en_cours = emprunts_ouverts_de_mission(nom, equipe)
     if not en_cours:
+        if equipe:
+            raise ErreurAction(
+                "Aucun matériel à restituer pour l'équipe « %s »." % equipe)
         raise ErreurAction("Aucun matériel à restituer pour « %s »." % nom)
 
     consommes = _consommations(p, en_cours)
@@ -498,6 +530,8 @@ def materiel_mission_restituer(utilisateur, p):
 
     total = sum(consommes.values())
     resume = "%d ligne(s) restituées pour « %s »" % (len(en_cours), nom)
+    if equipe:
+        resume += " (%s)" % equipe
     if total:
         resume += ", dont %d unité(s) consommées" % total
     return resume, cibles

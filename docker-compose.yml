@@ -1,0 +1,84 @@
+# -----------------------------------------------------------------------------
+# Heimdall-Django : l'application et sa base.
+#
+#   docker compose up -d --build
+#
+# Les valeurs sensibles se lisent dans un fichier `.env` à côté de celui-ci —
+# voir `.env.exemple`. Rien n'est écrit en dur ici : un mot de passe committé
+# dans un fichier de composition finit toujours par se retrouver ailleurs.
+# -----------------------------------------------------------------------------
+
+services:
+
+  base:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-heimdall}
+      POSTGRES_USER: ${POSTGRES_USER:-heimdall}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD est obligatoire}
+      # Le tri et la comparaison de chaînes suivent cette locale. La poser à la
+      # création évite qu'un « é » se range au hasard dans les listes triées.
+      POSTGRES_INITDB_ARGS: "--locale=fr_FR.UTF-8 --encoding=UTF8"
+      LANG: fr_FR.utf8
+    volumes:
+      - donnees-postgres:/var/lib/postgresql/data
+    healthcheck:
+      # `-d` et `-U` explicites : sans eux, pg_isready interroge la base du
+      # compte `postgres`, qui n'est pas celle de l'application.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-heimdall} -d ${POSTGRES_DB:-heimdall}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    ports:
+      # Lié à 127.0.0.1 explicitement, et pas `"5432:5432"` qui écouterait sur
+      # toutes les interfaces et exposerait la base au réseau local.
+      #
+      # Utile pour deux choses : travailler hors conteneur (`manage.py test`,
+      # `runserver`) et inspecter la base avec psql ou un client graphique.
+      # Sur un serveur de production où personne ne développe, cette section
+      # peut être retirée — l'application passe par le réseau interne de
+      # Compose, sous le nom « base ».
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      base:
+        # `service_healthy` et pas `service_started` : Postgres accepte les
+        # connexions quelques secondes après le démarrage de son conteneur.
+        # L'entrypoint attend aussi de son côté, mais mieux vaut ne pas
+        # dépendre d'une seule ceinture.
+        condition: service_healthy
+    environment:
+      DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:?DJANGO_SECRET_KEY est obligatoire}
+      DJANGO_DEBUG: "0"
+      DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+      DJANGO_CSRF_TRUSTED_ORIGINS: ${DJANGO_CSRF_TRUSTED_ORIGINS:-}
+      DATABASE_URL: postgres://${POSTGRES_USER:-heimdall}:${POSTGRES_PASSWORD}@base:5432/${POSTGRES_DB:-heimdall}
+      DJANGO_TIME_ZONE: ${DJANGO_TIME_ZONE:-Europe/Paris}
+      # Le site est-il servi en HTTPS ? Gouverne les cookies `Secure`, que le
+      # navigateur n'envoie pas sur une connexion en clair. Laissé à 1 sur un
+      # déploiement joignable seulement en http://, personne ne peut se
+      # connecter — l'écran de connexion reboucle sans message.
+      DJANGO_HTTPS: ${DJANGO_HTTPS:-1}
+      DJANGO_DERRIERE_PROXY: ${DJANGO_DERRIERE_PROXY:-0}
+      DJANGO_FORCE_HTTPS: ${DJANGO_FORCE_HTTPS:-0}
+      DJANGO_HSTS_SECONDS: ${DJANGO_HSTS_SECONDS:-0}
+      # Premier démarrage : un compte Admin est créé et son mot de passe
+      # provisoire affiché dans les journaux. Renseignez
+      # HEIMDALL_ADMIN_MOTDEPASSE pour le choisir vous-même.
+      HEIMDALL_AMORCER_ADMIN: ${HEIMDALL_AMORCER_ADMIN:-1}
+      HEIMDALL_ADMIN_IDENTIFIANT: ${HEIMDALL_ADMIN_IDENTIFIANT:-Admin}
+      HEIMDALL_ADMIN_MOTDEPASSE: ${HEIMDALL_ADMIN_MOTDEPASSE:-}
+      # Secondes d'attente de la base avant d'abandonner le démarrage.
+      HEIMDALL_ATTENTE_BASE: ${HEIMDALL_ATTENTE_BASE:-60}
+    ports:
+      - "${HEIMDALL_PORT:-8750}:8000"
+
+volumes:
+  donnees-postgres:

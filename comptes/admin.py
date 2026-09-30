@@ -2,7 +2,21 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import ActiviteCompte, Compte
+from .models import ActiviteCompte, Compte, Dotation
+
+
+class DotationInline(admin.TabularInline):
+    """Le sac, directement sur la fiche du compte.
+
+    `material_id` est un champ texte et non une liste déroulante : il n'y a pas
+    de clé étrangère vers le catalogue, volontairement — un article supprimé
+    doit laisser sa ligne visible plutôt que de faire disparaître la trace de ce
+    que la personne détient.
+    """
+
+    model = Dotation
+    extra = 0
+    fields = ("ordre", "material_id", "quantite", "detail")
 
 
 @admin.register(Compte)
@@ -15,6 +29,7 @@ class CompteAdmin(UserAdmin):
     """
 
     ordering = ("identifiant",)
+    inlines = [DotationInline]
     list_display = ("identifiant", "groupe", "administrateur", "actif",
                     "doit_changer", "is_staff", "derniere_visite")
     list_filter = ("administrateur", "actif", "doit_changer", "is_staff", "groupe")

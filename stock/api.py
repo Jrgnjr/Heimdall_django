@@ -15,7 +15,7 @@ elle-même : **401** veut dire « pas connecté », **403** veut dire « mot de 
 
 import json
 
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import ensure_csrf_cookie
@@ -61,10 +61,18 @@ def _comptes(request):
 
 
 def _enveloppe(request, charge):
+    # `dotations` voyage ici et pas dans le différentiel, pour deux raisons :
+    # son contenu dépend de qui demande — un non-administrateur ne voit que le
+    # sien —, et l'interface le relit à chaque réponse comme elle relit
+    # `comptes`. Le faire passer par `etat.charger()`, qui ignore l'utilisateur,
+    # aurait montré les sacs de toute l'équipe à tout le monde.
+    from .services.dotations import sacs
     charge.update({
         "user": request.user.identifiant,
         "admin": bool(request.user.administrateur),
         "comptes": _comptes(request),
+        "dotations": sacs(request.user.identifiant,
+                          bool(request.user.administrateur)),
     })
     return charge
 
@@ -139,6 +147,44 @@ def state(request):
 # Écriture
 # --------------------------------------------------------------------------
 
+def _verrou_ecriture():
+    """Sérialise les actions d'écriture, au niveau de la base.
+
+    Un verrou de ligne sur l'unique compteur de version : toute action qui
+    écrit doit d'abord l'obtenir, si bien que deux actions ne s'exécutent
+    jamais en parallèle. C'est ce que faisait le verrou en mémoire de
+    l'application Qt — sauf qu'un verrou en mémoire ne couvrirait qu'un seul
+    worker gunicorn, et il y en a plusieurs, dans des processus distincts.
+
+    Sans lui, deux requêtes simultanées lisent la version N, calculent toutes
+    les deux N+1, et la seconde se heurte à la contrainte d'unicité de
+    `stock_operation.version` : une erreur 500 au lieu d'un refus propre.
+    Mesuré avant ce verrou : six requêtes sur dix.
+
+    Il couvre aussi, par construction, toutes les autres courses du même
+    genre — la quantité lue puis réécrite, l'attribution du prochain
+    identifiant, le suffixage d'une clé d'article. Aucune n'a besoin de son
+    propre verrou puisque deux écritures ne se croisent plus.
+
+    Ce qu'il ne ralentit pas : les lectures. `/api/state`, que chaque
+    navigateur appelle toutes les 2,5 secondes, ne prend aucun verrou.
+    """
+    ligne = Version.objects.select_for_update().filter(pk=1).first()
+    if ligne is not None:
+        return ligne
+
+    # Base adoptée sans sa ligne de version — les migrations la posent, mais
+    # une base corrigée à la main peut l'avoir perdue. Le `atomic` imbriqué
+    # crée un point de reprise : si une autre requête gagne la course, seule
+    # cette insertion est annulée, pas l'action entière.
+    try:
+        with transaction.atomic():
+            Version.objects.create(pk=1, valeur=0)
+    except IntegrityError:
+        pass
+    return Version.objects.select_for_update().get(pk=1)
+
+
 @require_POST
 def action(request):
     """Applique une action et retourne la différence à envoyer à l'interface.
@@ -166,8 +212,11 @@ def action(request):
 
     try:
         with transaction.atomic():
+            # Le verrou d'abord, avant toute lecture : c'est lui qui rend le
+            # reste de ce bloc sûr à plusieurs.
+            ligne_version = _verrou_ecriture()
             auteur = _auteur_effectif(request, params)
-            depart = Version.courante()
+            depart = ligne_version.valeur
             avant_mv = PhoneMovement.objects.count()
             avant_ml = MaterialLog.objects.count()
 
@@ -175,7 +224,8 @@ def action(request):
                                       request.user.administrateur)
 
             nouvelle = depart + 1
-            Version.poser(nouvelle)
+            ligne_version.valeur = nouvelle
+            ligne_version.save(update_fields=["valeur"])
             # L'historique porte le compte réellement connecté, jamais le nom
             # emprunté : `params` conserve `auteur`, si bien que la ligne dit
             # qui a agi et pour qui.

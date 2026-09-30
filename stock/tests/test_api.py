@@ -92,14 +92,22 @@ class ContratAPI(TestCase):
         self.assertTrue(d["admin"])
         attendues = {"refs", "cabinets", "assignments", "movements", "materiel",
                      "matRes", "matLog", "missions", "missionStatus",
-                     "templates", "packs"}
+                     "templates", "packs", "equipes"}
         self.assertEqual(set(d["state"]), attendues)
 
     def test_rien_n_a_change(self):
+        """L'égalité stricte est voulue : elle fait échouer ce test dès qu'un
+        champ apparaît dans l'enveloppe, et c'est ainsi qu'on s'aperçoit d'un
+        ajout au contrat plutôt que de le découvrir à l'écran.
+
+        `dotations` y figure depuis le portage du sac de dotation : l'interface
+        le relit à chaque interrogation, comme `comptes`.
+        """
         self.connecter()
         d = self.client.get(reverse("api_state"), {"since": 1}).json()
         self.assertEqual(d, {"changed": False, "version": 1, "user": "Admin",
-                             "admin": True, "comptes": ["Admin"]})
+                             "admin": True, "comptes": ["Admin"],
+                             "dotations": {}})
 
     def test_un_retard_trop_grand_renvoie_l_etat_complet(self):
         """Sans les opérations intermédiaires, un différentiel mentirait."""

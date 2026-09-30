@@ -114,6 +114,44 @@ class Compte(AbstractBaseUser, PermissionsMixin):
         return "Groupe %s" % groupe if groupe else "Commun"
 
 
+class Dotation(models.Model):
+    """Une ligne du sac de dotation d'un compte.
+
+    Le sac, c'est ce qui a été remis à quelqu'un **à son arrivée** et qui reste
+    chez lui : ce n'est pas un emprunt, il n'a pas de retour attendu. D'où une
+    table à part des emprunts, et pas un `MaterialReservation` sans date de
+    retour — qui aurait fait apparaître la dotation dans tous les écrans
+    d'emprunt en cours.
+
+    `material_id` désigne un **exemplaire précis** du catalogue, pas un
+    libellé : c'est ce qui permet d'afficher son étiquette et son numéro de
+    série, et donc de savoir lequel des trois portables identiques est parti
+    dans quel sac.
+
+    Pas de clé étrangère vers `Material`, pour la même raison que les lignes de
+    pack et de template : un article supprimé ne doit pas faire disparaître en
+    silence la trace de ce que quelqu'un détient. La ligne reste, signalée comme
+    cassée, et c'est à l'administrateur de la corriger.
+    """
+
+    compte = models.ForeignKey(Compte, on_delete=models.CASCADE,
+                               db_column="identifiant",
+                               related_name="dotations", db_index=True)
+    ordre = models.IntegerField(default=0)
+    material_id = models.CharField("exemplaire", max_length=200)
+    quantite = models.IntegerField("quantité", default=1)
+    detail = models.CharField(max_length=200, blank=True, default="")
+
+    class Meta:
+        db_table = "materiel_personnel"
+        ordering = ["compte_id", "ordre", "id"]
+        verbose_name = "ligne de dotation"
+        verbose_name_plural = "sacs de dotation"
+
+    def __str__(self):
+        return "%s : %d × %s" % (self.compte_id, self.quantite, self.material_id)
+
+
 class ActiviteCompte(models.Model):
     """Qui a créé, renommé, désactivé ou supprimé quel compte.
 

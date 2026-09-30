@@ -66,18 +66,35 @@ if _drapeau("DJANGO_DERRIERE_PROXY"):
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     USE_X_FORWARDED_HOST = True
 
+# Le site est-il servi en HTTPS ? C'est une question distincte de DEBUG, et les
+# confondre coûte cher.
+#
+# Un cookie marqué `Secure` n'est pas envoyé par le navigateur sur une
+# connexion en clair. En le déduisant de `not DEBUG`, un déploiement sur le
+# réseau local — `http://192.168.1.50:8750` — devenait **inutilisable** :
+# l'écran de connexion rebouclait sans message, parce que le cookie CSRF
+# n'arrivait jamais. Le piège était invisible en essai local, les navigateurs
+# traitant `http://localhost` comme un contexte sécurisé et envoyant les
+# cookies `Secure` quand même.
+#
+# Le défaut reste sûr — HTTPS supposé hors développement — mais un déploiement
+# en clair peut désormais le dire, et ce sera un choix conscient.
+HTTPS = _drapeau("DJANGO_HTTPS", defaut=not DEBUG)
+
 if not DEBUG:
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
+    SESSION_COOKIE_SECURE = HTTPS
+    CSRF_COOKIE_SECURE = HTTPS
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = "DENY"
 
-    # Ces deux-là ne sont pas activés d'office, et c'est volontaire : ils
-    # supposent que le site est bien joignable en HTTPS. Les imposer à un
-    # déploiement encore en clair le rendrait inaccessible, et HSTS est
-    # difficile à annuler — les navigateurs s'en souviennent.
-    SECURE_SSL_REDIRECT = _drapeau("DJANGO_FORCE_HTTPS")
-    SECURE_HSTS_SECONDS = int(os.environ.get("DJANGO_HSTS_SECONDS", "0"))
+    # La redirection suit HTTPS par défaut, mais reste débranchable : derrière
+    # un proxy qui redirige déjà, la refaire ici est du travail en double.
+    SECURE_SSL_REDIRECT = _drapeau("DJANGO_FORCE_HTTPS", defaut=HTTPS)
+
+    # HSTS n'est jamais activé d'office : il est difficile à annuler, les
+    # navigateurs s'en souviennent pendant toute la durée annoncée.
+    SECURE_HSTS_SECONDS = (int(os.environ.get("DJANGO_HSTS_SECONDS", "0"))
+                           if HTTPS else 0)
     if SECURE_HSTS_SECONDS:
         SECURE_HSTS_INCLUDE_SUBDOMAINS = _drapeau(
             "DJANGO_HSTS_SOUS_DOMAINES", defaut=True)
@@ -106,6 +123,11 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # WhiteNoise sert les fichiers statiques depuis le conteneur, ce qui évite
+    # d'avoir à poser un nginx devant pour un seul dossier de CSS et d'images.
+    # Il vient juste après SecurityMiddleware, comme sa documentation l'exige :
+    # avant, il court-circuiterait les redirections HTTPS.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -134,6 +156,12 @@ TEMPLATES = [{
 
 # --------------------------------------------------------------------------
 # Base de données
+#
+# PostgreSQL, et lui seul. SQLite a servi de repli pendant le portage ; l'avoir
+# gardé signifiait deux bases aux contenus différents sur le même poste, et la
+# confusion que ça produit coûte plus que la commodité de développer sans
+# serveur. Les tests de concurrence, en particulier, ne veulent rien dire sur
+# SQLite : il ne sait pas écrire à plusieurs.
 # --------------------------------------------------------------------------
 
 def _base_depuis_url(url):
@@ -145,8 +173,8 @@ def _base_depuis_url(url):
     morceau = urlparse(url)
     if morceau.scheme not in ("postgres", "postgresql", "psql"):
         raise RuntimeError(
-            "DATABASE_URL doit désigner PostgreSQL (postgres://…) ; "
-            "laissez-la vide pour utiliser SQLite."
+            "DATABASE_URL doit désigner PostgreSQL (postgres://…), reçu : %r"
+            % (morceau.scheme or url[:40])
         )
     return {
         "ENGINE": "django.db.backends.postgresql",
@@ -161,17 +189,16 @@ def _base_depuis_url(url):
 
 
 _url = os.environ.get("DATABASE_URL", "").strip()
-if _url:
-    DATABASES = {"default": _base_depuis_url(_url)}
-else:
-    DATABASES = {"default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": Path(os.environ.get("HEIMDALL_SQLITE", RACINE / "donnees.sqlite3")),
-        # Sans cela, deux requêtes concurrentes se heurtent immédiatement au
-        # verrou d'écriture de SQLite. Le délai ne rend pas SQLite
-        # multi-écrivain, il évite seulement d'échouer sur une collision brève.
-        "OPTIONS": {"timeout": 20},
-    }}
+if not _url:
+    raise RuntimeError(
+        "DATABASE_URL est obligatoire. Exemple :\n"
+        "  DATABASE_URL=postgres://heimdall:motdepasse@127.0.0.1:5432/heimdall\n"
+        "Avec Docker, docker-compose.yml la fabrique lui-même : lancez\n"
+        "  docker compose exec web python manage.py …\n"
+        "Pour travailler hors conteneur, démarrez la base et pointez dessus :\n"
+        "  docker compose up -d base"
+    )
+DATABASES = {"default": _base_depuis_url(_url)}
 
 
 # --------------------------------------------------------------------------
@@ -227,9 +254,12 @@ STATIC_ROOT = Path(os.environ.get("DJANGO_STATIC_ROOT", RACINE / "staticfiles"))
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
     "staticfiles": {
+        # En production, WhiteNoise compresse et versionne : chaque fichier
+        # reçoit un nom dérivé de son contenu, donc un cache long sans risque de
+        # servir une ancienne version après un déploiement.
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage"
         if DEBUG else
-        "django.contrib.staticfiles.storage.ManifestStaticFilesStorage"
+        "whitenoise.storage.CompressedManifestStaticFilesStorage"
     },
 }
 

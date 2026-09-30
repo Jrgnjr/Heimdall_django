@@ -2,11 +2,22 @@ __pycache__/
 *.py[cod]
 .venv/
 env/
+# Plus de SQLite dans le projet, mais les motifs restent : un fichier laissé
+# par une version antérieure ne doit pas se retrouver committé.
 *.sqlite3
 *.sqlite3-wal
 *.sqlite3-shm
+*.rancart
+
+# Bases de l'application Qt, si elles sont copiées ici pour une reprise.
 donnees.db
 comptes.db
+
+# Sauvegardes PostgreSQL. Elles contiennent les données réelles et les
+# empreintes de mots de passe : elles n'ont rien à faire dans un dépôt, public
+# ou non. Transportez-les à la main.
+sauvegarde-*.sql
+*.dump
 staticfiles/
 .env
 *.log

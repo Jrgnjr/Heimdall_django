@@ -248,18 +248,23 @@ def pack_emprunt(utilisateur, p):
                 "demandée(s). Le pack « %s » n'est pas sorti."
                 % (m.designation, libre, n, pack.name))
 
+    from .equipes import equipe_demandee
     from .materiel import SANS_MISSION
     nom_mission = mission.name if mission else SANS_MISSION
+    equipe = equipe_demandee(p, nom_mission)
     note = commentaire_de_pack(pack.name, commentaire)
     cibles = [["matLog", ""], ["packs", ""]]
     for m, n in prepare:
-        creer_emprunt(m, n, nom_mission, utilisateur, pack=pack.name)
+        creer_emprunt(m, n, nom_mission, utilisateur, pack=pack.name,
+                      equipe=equipe)
         journaux.materiel("SORTIE", m.nom_affiche, n, utilisateur, nom_mission,
                           note, m.identite)
         cibles.append(["materiel", m.name])
     resume = "Pack « %s » emprunté (%d article(s))" % (pack.name, len(prepare))
     if mission:
         resume += " pour « %s »" % mission.name
+        if equipe:
+            resume += " (%s)" % equipe
     return resume, cibles
 
 

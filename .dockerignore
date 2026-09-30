@@ -1,0 +1,48 @@
+# Ce qui n'a rien à faire dans l'image.
+#
+# Sans ce fichier, `COPY . .` emporterait le dossier `.git`, les environnements
+# virtuels et les bases locales : une image plus lourde, et surtout des données
+# et des secrets embarqués dans une couche que n'importe qui pourrait extraire.
+
+.git
+.gitattributes
+.gitignore
+
+# Secrets et réglages locaux. Les variables arrivent par l'environnement, pas
+# par un fichier copié dans l'image.
+.env
+*.env
+!.env.exemple
+
+# Environnements virtuels : ceux de l'hôte sont compilés pour l'hôte, et
+# l'image construit les siens.
+.venv
+venv
+env
+ENV
+
+__pycache__
+*.py[cod]
+*$py.class
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# Bases locales de développement, et les bases reprises de l'application Qt.
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+donnees.db
+comptes.db
+*.db-wal
+*.db-shm
+sauvegarde-*.db
+
+# Recollecté à la construction.
+staticfiles
+
+*.log
+.DS_Store
+Thumbs.db
+.idea
+.vscode

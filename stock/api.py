@@ -15,6 +15,7 @@ elle-même : **401** veut dire « pas connecté », **403** veut dire « mot de 
 
 import json
 
+from comptes.models import Compte
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.utils import timezone
@@ -22,8 +23,11 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 
 from . import etat
-from .models import MaterialLog, Operation, PhoneMovement, Version
+from .models import MaterialLog, Mission, Operation, PhoneMovement, Version
 from .services import ACTIONS, ErreurAction, executer
+from .services.gestion import gestion_par_mission
+from .services.prets import etat_prets
+from .services.statuts import figer_statuts
 
 
 # --------------------------------------------------------------------------
@@ -71,6 +75,24 @@ def _enveloppe(request, charge):
         "user": request.user.identifiant,
         "admin": bool(request.user.administrateur),
         "comptes": _comptes(request),
+        # Les réglages du compte : l'interface les applique au démarrage, de
+        # sorte que chacun retrouve les siens en se connectant.
+        "reglages": request.user.reglages or {},
+        # Prêts de matériel personnel : demandes reçues et émises, prêts en
+        # cours, contenu des autres sacs. Propre à chaque compte.
+        "pret": etat_prets(request.user.identifiant),
+        # Le plus haut statut atteint par chaque mission : l'interface calcule
+        # le statut, et ne le laisse pas descendre sous ce plancher.
+        # Qui gère chaque mission : une information de la mission, pas un secret.
+        "gestionMissions": gestion_par_mission(),
+        # Les comptes actifs, pour désigner une gestion ou un effectif. Seuls les
+        # administrateurs recevaient cette liste (`comptes`) ; composer une mission
+        # est à la portée de tous.
+        "annuaire": list(Compte.objects.filter(actif=True)
+                         .values_list("identifiant", flat=True)),
+        "plancherMissions": {m.name: m.status_max for m in
+                             Mission.objects.exclude(status_max__isnull=True)
+                             .exclude(status_max="")},
         "dotations": sacs(request.user.identifiant,
                           bool(request.user.administrateur)),
     })
@@ -95,6 +117,86 @@ def _auteur_effectif(request, params):
     if demande not in _comptes(request):
         raise ErreurAction("Le compte « %s » n'existe pas." % demande)
     return demande
+
+
+# --------------------------------------------------------------------------
+# Réglages du compte
+# --------------------------------------------------------------------------
+
+TAILLES_PAGE = {"stockPhonePageSize", "stockMaterialPageSize"}
+TAILLES_ADMIN = {"adminPhoneSize", "adminMaterialSize", "adminConsoSize"}
+TEXTES = {"brand", "cabinet", "matCat", "logFilter"}
+BOOLEENS = {"showArchived"}
+THEMES = ("sombre", "clair", "auto")
+# Les cartes du profil. La liste est aussi dans l'interface (`WIDGETS`) : un
+# identifiant ajouté d'un côté seulement serait refusé, ou ignoré.
+WIDGETS_PROFIL = {
+    "compteurs", "a_recommander", "sac", "sorties", "missions", "activite",
+    "missions_jour", "retard", "stock_bas", "equipes", "etat_stock",
+    "acces_rapides", "prets", "demandes",
+}
+
+
+def _disposition_valide(valeur):
+    """Une liste de {id, taille}, sans doublon, d'identifiants connus."""
+    if not isinstance(valeur, list) or len(valeur) > len(WIDGETS_PROFIL):
+        return False
+    vus = set()
+    for carte in valeur:
+        if not isinstance(carte, dict) or set(carte) != {"id", "taille"}:
+            return False
+        if carte["id"] not in WIDGETS_PROFIL or carte["id"] in vus:
+            return False
+        if carte["taille"] not in ("s", "l"):
+            return False
+        vus.add(carte["id"])
+    return True
+
+
+
+def _reglage_valide(cle, valeur):
+    """Seuls les réglages connus, avec des valeurs que l'interface sait lire.
+
+    Une liste fermée plutôt qu'un dictionnaire libre : ce que le client envoie
+    est stocké tel quel et renvoyé à chaque démarrage, il ne doit pas pouvoir y
+    déposer n'importe quoi.
+    """
+    if cle in BOOLEENS:
+        return isinstance(valeur, bool)
+    if cle in TAILLES_PAGE:
+        return not isinstance(valeur, bool) and valeur in ("auto", "all", 20, 50)
+    if cle in TAILLES_ADMIN:
+        return not isinstance(valeur, bool) and valeur in ("all", 10, 20, 50, 100)
+    if cle in TEXTES:
+        return isinstance(valeur, str) and len(valeur) <= 80
+    if cle == "theme":
+        return valeur in THEMES
+    if cle == "profilWidgets":
+        return _disposition_valide(valeur)
+    return False
+
+
+@require_POST
+def reglages(request):
+    """Enregistre des réglages du compte connecté (fusion avec les existants)."""
+    refus = _refus_session(request)
+    if refus is not None:
+        return refus
+    try:
+        corps = json.loads(request.body.decode("utf-8") or "{}")
+    except (ValueError, UnicodeDecodeError):
+        return JsonResponse({"error": "Requête illisible."}, status=400)
+    envoyes = corps.get("reglages") if isinstance(corps, dict) else None
+    if not isinstance(envoyes, dict):
+        return JsonResponse({"error": "Requête illisible."}, status=400)
+    for cle, valeur in envoyes.items():
+        if not _reglage_valide(cle, valeur):
+            return JsonResponse({"error": "Réglage refusé : %s." % cle}, status=422)
+
+    compte = request.user
+    compte.reglages = {**(compte.reglages or {}), **envoyes}
+    compte.save(update_fields=["reglages"])
+    return JsonResponse({"ok": True, "reglages": compte.reglages})
 
 
 # --------------------------------------------------------------------------
@@ -215,6 +317,9 @@ def action(request):
             # Le verrou d'abord, avant toute lecture : c'est lui qui rend le
             # reste de ce bloc sûr à plusieurs.
             ligne_version = _verrou_ecriture()
+            # Les statuts sont figés **avant** l'action : ce qu'elle va changer
+            # (un emprunt rendu, une date repoussée) ne doit pas les faire reculer.
+            figer_statuts()
             auteur = _auteur_effectif(request, params)
             depart = ligne_version.valeur
             avant_mv = PhoneMovement.objects.count()

@@ -19,5 +19,10 @@ comptes.db
 sauvegarde-*.sql
 *.dump
 staticfiles/
+# Le fichier de réglages et toutes ses variantes — sauvegardes avant
+# modification comprises. Ils contiennent le mot de passe de la base et la clé
+# de signature des sessions : aucun ne doit partir dans un dépôt.
 .env
+.env.*
+!.env.exemple
 *.log

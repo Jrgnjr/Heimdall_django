@@ -26,6 +26,8 @@ from comptes.models import Compte
 from ..models import Equipe, MaterialReservation, Mission
 from . import action, journaux
 from .champs import ErreurAction, ligne, texte
+from .gestion import effectifs_de, exiger_gestion, gestionnaires_de
+from .statuts import statut_de
 
 SANS_EQUIPE = ""
 
@@ -86,6 +88,7 @@ def equipe_demandee(p, mission_nom, cle="equipe"):
 @action("mission.equipe.creer")
 def mission_equipe_creer(utilisateur, p):
     mission = mission_existante(texte(p, "mission", maxi=200))
+    exiger_gestion(mission.name, utilisateur, p)
     nom = texte(p, "nom", maxi=200)
     if _homonyme(mission, nom):
         raise ErreurAction(
@@ -107,6 +110,7 @@ def mission_equipe_renommer(utilisateur, p):
     pas où il était, et une équipe renommée doit continuer de le retrouver.
     """
     mission = mission_existante(texte(p, "mission", maxi=200))
+    exiger_gestion(mission.name, utilisateur, p)
     nom = texte(p, "nom", maxi=200)
     equipe = equipe_existante(mission, nom)
     nouveau = texte(p, "nouveauNom", maxi=200)
@@ -135,6 +139,7 @@ def mission_equipe_supprimer(utilisateur, p):
     plus où le ranger.
     """
     mission = mission_existante(texte(p, "mission", maxi=200))
+    exiger_gestion(mission.name, utilisateur, p)
     nom = texte(p, "nom", maxi=200)
     equipe = equipe_existante(mission, nom)
 
@@ -159,6 +164,7 @@ def mission_equipe_membres(utilisateur, p):
     reviendrait à deviner ce que l'écran voulait dire.
     """
     mission = mission_existante(texte(p, "mission", maxi=200))
+    exiger_gestion(mission.name, utilisateur, p)
     nom = texte(p, "nom", maxi=200)
     equipe = equipe_existante(mission, nom)
 
@@ -180,6 +186,16 @@ def mission_equipe_membres(utilisateur, p):
         if not Compte.objects.filter(pk=identifiant).exists():
             raise ErreurAction("Le compte « %s » n'existe pas." % identifiant)
         identifiants.append(identifiant)
+
+    # On est gestionnaire ou effectif, pas les deux. Seuls les ajouts sont
+    # contrôlés : quelqu'un déjà dans l'équipe n'est pas refusé rétroactivement.
+    deja = set(equipe.membres.values_list("identifiant", flat=True))
+    gestion = set(gestionnaires_de(mission.name))
+    for identifiant in identifiants:
+        if identifiant in gestion and identifiant not in deja:
+            raise ErreurAction(
+                "« %s » gère la mission « %s » : on est soit en gestion, soit en "
+                "effectif. Retirez-le d'abord de la gestion." % (identifiant, mission.name))
 
     equipe.membres.set(identifiants)
     return ("« %s » : %d membre(s)" % (nom, len(identifiants)),
@@ -229,6 +245,51 @@ def materiel_equipe_affecter(utilisateur, p):
         "Réaffecté de %s vers %s" % (avant, cible or "la mission"), m.identite)
     return ("%d × %s → %s" % (r.qty, m.nom_affiche, cible or "la mission"),
             [["materiel", m.name], ["matLog", ""], ["mission", r.mission]])
+
+
+@action("materiel.mission.desassigner")
+def materiel_mission_desassigner(utilisateur, p):
+    """Retire une ligne d'une mission **prévue**, et rend le matériel.
+
+    Tant que la mission est prévue, le matériel qu'on lui a affecté n'est pas
+    parti : c'est une réservation. La défaire, c'est le rendre — il regagne le
+    stock, ou le sac qui l'avait prêté. C'est la correction d'une affectation à
+    tort, ou d'un besoin qui a changé.
+
+    La ligne est **supprimée**, et non fermée comme le fait une restitution : une
+    ligne fermée resterait dans la mission, et une mission dont toutes les lignes
+    sont rendues est calculée « terminée » — la mission prévue, vidée de son
+    matériel, passerait donc à « terminée » le jour de sa date. Le journal garde
+    la trace, avec un RETOUR.
+
+    Une fois la mission en cours, on ne désassigne plus : on **restitue**
+    (`materiel.mission.restituer_ligne`), et la ligne reste dans son histoire.
+    """
+    from .materiel import article
+
+    m = article(texte(p, "nom", maxi=200))
+    r = ligne(list(m.emprunts.all()), p, "ligne d'emprunt")
+    if not r.ouvert:
+        raise ErreurAction(
+            "Cette ligne est déjà rendue : elle n'est plus affectée à la mission.")
+    if r.mission == Mission.SANS_MISSION or not r.mission:
+        raise ErreurAction("Cette ligne n'est affectée à aucune mission.")
+
+    statut = statut_de(r.mission)
+    if statut != Mission.PREVUE:
+        raise ErreurAction(
+            "La mission « %s » est %s : on ne désassigne du matériel que tant "
+            "qu'elle est prévue. Restituez-le à la place." % (r.mission, statut.lower()))
+
+    mission, quantite, preteur = r.mission, r.qty, r.sac_de
+    r.delete()
+    journaux.materiel(
+        "RETOUR", m.nom_affiche, quantite, utilisateur, mission,
+        "Désassigné de la mission prévue" + (" (revient dans le sac de %s)" % preteur
+                                              if preteur else ""),
+        m.identite)
+    return ("%d × %s désassigné(s) de « %s » et rendu(s)" % (quantite, m.nom_affiche, mission),
+            [["materiel", m.name], ["matLog", ""], ["mission", mission]])
 
 
 # --------------------------------------------------------------------------

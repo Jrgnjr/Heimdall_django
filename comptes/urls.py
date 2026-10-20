@@ -14,4 +14,6 @@ urlpatterns = [
     path("connexion/", views.connexion, name="connexion"),
     path("mot-de-passe/", views.mot_de_passe, name="mot_de_passe"),
     path("deconnexion/", views.deconnexion, name="deconnexion"),
+    path("mot-de-passe-oublie/", views.mot_de_passe_oublie, name="mot_de_passe_oublie"),
+    path("code-recuperation/", views.code_recuperation, name="code_recuperation"),
 ]

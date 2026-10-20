@@ -15,6 +15,7 @@ Deux bases possibles, et le choix se fait à l'exécution :
 """
 
 import os
+import sys
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
@@ -128,10 +129,15 @@ MIDDLEWARE = [
     # Il vient juste après SecurityMiddleware, comme sa documentation l'exige :
     # avant, il court-circuiterait les redirections HTTPS.
     "whitenoise.middleware.WhiteNoiseMiddleware",
+    # Une session par onglet : chaque onglet vit sous sa propre adresse, et ses
+    # cookies y sont attachés. Placé avant la session, qu'il oriente.
+    "comptes.onglets.OngletMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    # Une adresse /u/<compte>/ n'existe que pour la session de ce compte.
+    "comptes.onglets.CoherenceOnglet",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -235,6 +241,12 @@ AUTH_PASSWORD_VALIDATORS = [
 LOGIN_URL = "connexion"
 LOGIN_REDIRECT_URL = "accueil"
 LOGOUT_REDIRECT_URL = "connexion"
+# Chaque onglet du navigateur a sa propre session (voir comptes/onglets.py).
+# Désactivable pour un client qui n'a pas d'onglets ; les tests le sont par
+# défaut, ils n'ont pas à suivre une redirection pour atteindre une page.
+ONGLETS_ISOLES = (os.environ.get("HEIMDALL_ONGLETS_ISOLES", "1") != "0"
+                  and "test" not in sys.argv)
+
 SESSION_COOKIE_AGE = int(os.environ.get("DJANGO_SESSION_AGE", str(12 * 3600)))
 SESSION_SAVE_EVERY_REQUEST = True
 

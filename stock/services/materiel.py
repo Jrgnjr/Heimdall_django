@@ -81,19 +81,24 @@ def creer_article(nom, cat, affect, quantite, etiquette="", numero_serie=""):
         etiquette=etiquette or "", numero_serie=numero_serie or "")
 
 
-def creer_emprunt(m, quantite, mission, par_qui, pack="", equipe=""):
+def creer_emprunt(m, quantite, mission, par_qui, pack="", equipe="", sac_de="",
+                  force_par=""):
     """`pack` retient la malette d'où l'article est sorti, ou reste vide.
 
     `equipe` retient l'équipe de la mission à qui la ligne est attribuée. Vide
     signifie « rattaché à la mission sans plus de précision » — le cas des
     missions sans équipes, et de tout ce qui existait avant elles.
+
+    `sac_de` désigne le compte dont le sac a prêté l'article (voir
+    `services/prets.py`) ; vide pour un emprunt au stock commun.
     """
     seq = MaterialReservation.objects.filter(material=m).aggregate(m=Max("seq"))["m"]
     seq = -1 if seq is None else seq
     return MaterialReservation.objects.create(
         material=m, seq=seq + 1, qty=quantite, mission=mission,
         taken_by=par_qui, returned_by=None, taken_at=timezone.now(),
-        returned_at=None, pack=pack or "", equipe=equipe or "")
+        returned_at=None, pack=pack or "", equipe=equipe or "",
+        sac_de=sac_de or "", force_par=force_par or "")
 
 
 def emprunts_ouverts_de_mission(nom, equipe=None):
@@ -162,6 +167,36 @@ def materiel_reception(utilisateur, p):
     journaux.materiel("ENTRÉE", m.nom_affiche, n, utilisateur,
                       identite=m.identite)
     return ("Entrée de %d × %s" % (n, m.nom_affiche),
+            [["materiel", m.name], ["matLog", ""]])
+
+
+@action("materiel.ajuster")
+def materiel_ajuster(utilisateur, p):
+    """Fixe le stock d'un article à une valeur, pour corriger un écart.
+
+    À la différence d'une réception, qui ajoute, on dit ici combien il y en a
+    réellement : un inventaire, une erreur de saisie. L'écart est inscrit au
+    journal avec l'ancienne et la nouvelle valeur, pour qu'une correction ne
+    passe jamais inaperçue.
+
+    Le stock ne peut pas descendre sous ce qui est actuellement sorti : ces
+    unités existent, elles sont chez quelqu'un.
+    """
+    m = article(texte(p, "nom", maxi=200))
+    nouveau = qte(p, "qty", mini=0)
+    dehors = sum(r.qty for r in m.emprunts.all() if r.ouvert)
+    if nouveau < dehors:
+        raise ErreurAction("« %s » : %d unité(s) sont sorties, le stock ne peut "
+                           "pas descendre sous ce nombre." % (m.designation, dehors))
+    ancien = m.qty
+    if nouveau == ancien:
+        return "« %s » : stock inchangé" % m.nom_affiche, [["materiel", m.name]]
+    m.qty = nouveau
+    m.save(update_fields=["qty"])
+    journaux.materiel("AJUST.", m.nom_affiche, abs(nouveau - ancien), utilisateur,
+                      commentaire="Stock corrigé de %d à %d" % (ancien, nouveau),
+                      identite=m.identite)
+    return ("« %s » : stock %d → %d" % (m.nom_affiche, ancien, nouveau),
             [["materiel", m.name], ["matLog", ""]])
 
 
@@ -284,15 +319,28 @@ def materiel_seuil(utilisateur, p):
 
     Zéro vaut « pas de seuil » : c'est la valeur de départ de tous les
     articles, et elle ne doit rien déclencher.
+
+    Le seuil se règle par `libelle` : il vaut pour tout ce qui porte ce nom, et
+    est posé sur chacun de ses exemplaires, qui restent ainsi d'accord. L'alerte
+    se compare au stock cumulé du groupe. `nom` désigne un seul article.
     """
-    m = article(texte(p, "nom", maxi=200))
     seuil = qte(p, "seuil", mini=0)
-    m.seuil = seuil
-    m.save(update_fields=["seuil"])
+    libelle = texte(p, "libelle", obligatoire=False, maxi=200)
+    if libelle:
+        membres = par_libelle(libelle)
+        if not membres:
+            raise ErreurAction("L'article « %s » n'existe plus. Rechargez la page."
+                               % libelle)
+    else:
+        membres = [article(texte(p, "nom", maxi=200))]
+    for m in membres:
+        m.seuil = seuil
+        m.save(update_fields=["seuil"])
+    nom = membres[0].nom_affiche
+    cibles = [["materiel", m.name] for m in membres]
     if not seuil:
-        return ("%s : plus de seuil d'alerte" % m.nom_affiche, [["materiel", m.name]])
-    return ("%s : alerte sous %d unité(s)" % (m.nom_affiche, seuil),
-            [["materiel", m.name]])
+        return "%s : plus de seuil d'alerte" % nom, cibles
+    return "%s : alerte sous %d unité(s)" % (nom, seuil), cibles
 
 
 # --------------------------------------------------------------------------
@@ -434,6 +482,36 @@ def materiel_emprunt_retour(utilisateur, p):
 # --------------------------------------------------------------------------
 # Restitution de mission, et consommation
 # --------------------------------------------------------------------------
+
+@action("materiel.mission.restituer_ligne")
+def materiel_mission_restituer_ligne(utilisateur, p):
+    """Rend **une** ligne d'une mission, sans toucher aux autres.
+
+    C'est le geste de la fiche de mission une fois celle-ci en cours : le matériel
+    ne se « désassigne » plus (voir `materiel.mission.desassigner`, réservé aux
+    missions prévues), il se rend. La ligne se ferme — elle reste dans l'historique
+    de la mission, contrairement à un retour par suppression — et le matériel
+    regagne le stock, ou le sac qui l'avait prêté.
+
+    La ligne est rendue **entière** : pour déclarer des consommables utilisés, la
+    restitution de toute la mission (`materiel.mission.restituer`) est le bon geste.
+    """
+    m = article(texte(p, "nom", maxi=200))
+    r = ligne(list(m.emprunts.all()), p, "ligne d'emprunt")
+    if not r.ouvert:
+        raise ErreurAction("Cette ligne est déjà rendue.")
+    if r.mission == SANS_MISSION or not r.mission:
+        raise ErreurAction("Cette ligne n'est affectée à aucune mission : rendez-la "
+                           "par le retour habituel.")
+
+    mission = r.mission
+    r.returned_by, r.returned_at = utilisateur, timezone.now()
+    r.save(update_fields=["returned_by", "returned_at"])
+    journaux.materiel("RETOUR", m.nom_affiche, r.qty, utilisateur, mission,
+                      identite=m.identite)
+    return ("%d × %s restitué(s) pour « %s »" % (r.qty, m.nom_affiche, mission),
+            [["materiel", m.name], ["matLog", ""], ["mission", mission]])
+
 
 def _consommations(p, en_cours):
     """Ce que la personne déclare avoir consommé, article par article.

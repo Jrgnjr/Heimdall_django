@@ -15,6 +15,8 @@ from django.db.models import Max
 from ..models import MaterialReservation, Mission
 from . import action, journaux
 from .champs import ErreurAction, date_prevue, texte
+from .gestion import poser_gestionnaires, valider_gestionnaires
+from .statuts import ORDRE, changement_permis, peut_reculer, statut_de
 
 
 def mission_existante(nom):
@@ -45,6 +47,10 @@ def mission_creer(utilisateur, p):
     prepare = (servir_template(template_nom, choix_exemplaires(p))
                if template_nom else [])
 
+    # Qui gère la mission : celui qui la crée, par défaut, ou ceux qu'il désigne.
+    # À la création il n'y a pas encore d'effectif, donc pas de conflit possible.
+    gestionnaires = valider_gestionnaires(p.get("gestionnaires") or [utilisateur])
+
     quand = date_prevue(p)
     if existante is None:
         ordre = (Mission.objects.aggregate(m=Max("ordre"))["m"] or 0) + 1
@@ -56,6 +62,7 @@ def mission_creer(utilisateur, p):
         existante.owner = existante.owner or utilisateur
         existante.planned_date = quand
         existante.save(update_fields=["is_meta", "owner", "planned_date"])
+    poser_gestionnaires(Mission.objects.get(pk=nom), gestionnaires)
 
     from .materiel import creer_emprunt
     # Une mission créée avec un template n'a pas encore d'équipe : son matériel
@@ -83,6 +90,12 @@ def mission_date(utilisateur, p):
 
 @action("mission.statut")
 def mission_statut(utilisateur, p):
+    """Change le statut d'une mission, dans le respect de l'ordre.
+
+    On avance librement (prévue → en cours → terminée) et on peut annuler ; on ne
+    recule pas, sauf pour le gestionnaire de la mission et les administrateurs.
+    Voir `services/statuts.py`.
+    """
     nom = texte(p, "nom", maxi=200)
     statut = texte(p, "statut", maxi=40)
     if statut not in Mission.STATUTS:
@@ -93,8 +106,21 @@ def mission_statut(utilisateur, p):
         # faut une ligne pour ranger son statut.
         m = Mission.objects.create(name=nom, ordre=None, is_meta=False,
                                    owner="", archived=False)
+
+    actuel = statut_de(nom)
+    permis, raison = changement_permis(
+        actuel, statut, m,
+        peut_reculer(m, utilisateur, p.get("_administrateur")))
+    if not permis:
+        raise ErreurAction(raison)
+
     m.status_override = statut
-    m.save(update_fields=["status_override"])
+    # Un statut de l'échelle devient le nouveau plancher — y compris plus bas,
+    # quand c'est le gestionnaire qui recule : sans cela le calcul remonterait
+    # aussitôt la mission à son ancien niveau.
+    if statut in ORDRE:
+        m.status_max = statut
+    m.save(update_fields=["status_override", "status_max"])
     return "« %s » : %s" % (nom, statut), [["mission", nom]]
 
 

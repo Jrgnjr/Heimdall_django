@@ -1,0 +1,99 @@
+{% load static %}<!doctype html>
+<html lang="fr" data-theme="{{ theme|default:'dark' }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<script>(function(){var h=document.documentElement;if(h.dataset.theme==="auto"){h.dataset.theme=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}})();</script>
+<meta http-equiv="refresh" content="30">
+<title>{{ mission.name }} — Heimdall</title>
+<link rel="icon" href="{% static 'stock/heimdall.ico' %}">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{ --fond:#111318; --carte:#15181d; --bord:#23262d; --texte:#e7e9ee;
+       --doux:#9aa2af; --gris:#6d7480; --bleu:#6f9dff; --vert:#5fc79a;
+       --ambre:#f0b45a }
+html[data-theme="light"]{ --fond:#f3f5f8; --carte:#ffffff; --bord:#dde1e8; --texte:#1a1d23;
+       --doux:#5a6272; --gris:#6d7480; --bleu:#1f5fd9; --vert:#1c8a59; --ambre:#b06a00 }
+html[data-theme="light"] .PREVUE{ background:#e9ecf1 }
+html[data-theme="light"] .ENCOURS, html[data-theme="light"] .pastille{ color:#1f5fd9 }
+html[data-theme="light"] .ANNULEE{ color:#c8372d }
+html[data-theme="light"] th, html[data-theme="light"] td{ border-color:#e9ecf1 }
+*{ box-sizing:border-box }
+body{ margin:0; background:var(--fond); color:var(--texte);
+      font:400 13px/1.5 Archivo,system-ui,sans-serif; padding:24px }
+main{ max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:18px }
+a{ color:var(--bleu); text-decoration:none }
+header{ display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap }
+h1{ margin:0; font:700 24px/1.2 Archivo,sans-serif; letter-spacing:-.01em }
+h2{ margin:0 0 10px; font:600 10px/1 Archivo,sans-serif; color:var(--gris); letter-spacing:.16em; text-transform:uppercase }
+.sous{ color:var(--gris); font-size:12px; margin-top:4px }
+.badge{ font:600 11px/1 Archivo,sans-serif; letter-spacing:.1em; padding:6px 10px; border-radius:6px }
+.PREVUE{ background:#1f232a; color:var(--doux) }
+.ENCOURS{ background:rgba(42,107,242,.14); color:#8fb4ff }
+.TERMINEE{ background:rgba(95,199,154,.13); color:var(--vert) }
+.ANNULEE{ background:rgba(224,90,80,.14); color:#ef8b83 }
+.chiffres{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px }
+.carte{ background:var(--carte); border:1px solid var(--bord); border-radius:11px; padding:16px }
+.chiffre b{ display:block; font:700 30px/1 Archivo,sans-serif }
+.chiffre span{ font:500 10px/1 Archivo,sans-serif; color:var(--gris); letter-spacing:.14em; text-transform:uppercase; display:block; margin-top:8px }
+.equipes{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px }
+.membres{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px }
+.pastille{ background:rgba(42,107,242,.13); border:1px solid rgba(42,107,242,.32); color:#8fb4ff; border-radius:999px; padding:3px 10px; font-size:12px }
+table{ width:100%; border-collapse:collapse }
+td,th{ text-align:left; padding:7px 6px; border-top:1px solid var(--bord); vertical-align:top }
+th{ border-top:0; font:600 9.5px/1 Archivo,sans-serif; color:var(--gris); letter-spacing:.14em; text-transform:uppercase }
+td.q{ width:48px; font-weight:600 }
+.rendu{ color:var(--vert) } .dehors{ color:var(--ambre) }
+.vide{ color:var(--gris); font-size:12px }
+footer{ color:var(--gris); font-size:11px; text-align:center }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div style="flex:1 1 300px">
+      <h1>{{ mission.name }}</h1>
+      <div class="sous">
+        {% if gestion %}Gestion : {{ gestion|join:", " }}{% endif %}
+        {% if mission.planned_date %}{% if gestion %} · {% endif %}Prévue le {{ mission.planned_date|date:"d/m/Y" }}{% endif %}
+        {% if mission.archived %} · archivée{% endif %}
+      </div>
+    </div>
+    <span class="badge {% if statut == 'EN COURS' %}ENCOURS{% elif statut == 'TERMINÉE' %}TERMINEE{% elif statut == 'ANNULÉE' %}ANNULEE{% else %}PREVUE{% endif %}">{{ statut }}</span>
+    <a href="{% url 'accueil' %}">← Application</a>
+  </header>
+
+  <div class="chiffres">
+    <div class="carte chiffre"><b>{{ groupes|length }}</b><span>Équipes</span></div>
+    <div class="carte chiffre"><b>{{ nb_membres }}</b><span>Personnes</span></div>
+    <div class="carte chiffre"><b class="dehors">{{ nb_sorties }}</b><span>Lignes dehors</span></div>
+    <div class="carte chiffre"><b class="rendu">{{ nb_rendues }}</b><span>Lignes rendues</span></div>
+  </div>
+
+  {% if groupes %}
+  <section>
+    <h2>Équipes</h2>
+    <div class="equipes">
+      {% for g in groupes %}
+      <div class="carte">
+        <div style="font:600 15px/1.2 Archivo,sans-serif;margin-bottom:10px">{{ g.nom }}</div>
+        <div class="membres">
+          {% for m in g.membres %}<span class="pastille">{{ m }}</span>{% empty %}<span class="vide">Aucun membre</span>{% endfor %}
+        </div>
+        {% include "stock/_mission_lignes.html" with lignes=g.lignes %}
+      </div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
+  <section>
+    <h2>{% if groupes %}Matériel sans équipe{% else %}Matériel{% endif %}</h2>
+    <div class="carte">{% include "stock/_mission_lignes.html" with lignes=sans_equipe %}</div>
+  </section>
+
+  <footer>Mise à jour automatique toutes les 30 secondes · Heimdall</footer>
+</main>
+</body>
+</html>

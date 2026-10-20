@@ -1,0 +1,13 @@
+{% if lignes %}
+<table>
+  <tr><th>Qté</th><th>Article</th><th>Pris par</th><th>État</th></tr>
+  {% for l in lignes %}
+  <tr>
+    <td class="q">{{ l.qty }}</td>
+    <td>{{ l.article }}</td>
+    <td>{{ l.pris_par }}</td>
+    <td>{% if l.rendu %}<span class="rendu">Rendu</span>{% else %}<span class="dehors">Dehors</span>{% endif %}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% else %}<span class="vide">Aucun matériel</span>{% endif %}

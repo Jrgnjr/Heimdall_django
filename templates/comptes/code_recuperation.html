@@ -1,0 +1,40 @@
+{% extends "comptes/base.html" %}
+{% block titre %}Code de récupération · Heimdall{% endblock %}
+{% block contenu %}
+<h1>Code de récupération</h1>
+
+{% if code %}
+<p class="sous">Voici votre nouveau code. <b>Il ne sera plus jamais affiché</b> : notez-le maintenant, et gardez-le en lieu sûr.</p>
+<p style="margin:0 0 16px;padding:16px;text-align:center;border-radius:10px;border:1px dashed var(--bleu);background:rgba(42,107,242,.08);font:600 17px ui-monospace,Consolas,monospace;letter-spacing:.08em;user-select:all">{{ code }}</p>
+<div class="aide">
+  <ul>
+    <li>Il sert à choisir un nouveau mot de passe depuis la page de connexion (« Mot de passe oublié ? »).</li>
+    <li>Il ne fonctionne qu'une fois ; vous en générerez un autre ensuite.</li>
+    <li>Si vous le perdez, générez-en un nouveau : l'ancien cesse de fonctionner.</li>
+  </ul>
+</div>
+<p class="aide"><a href="{% url 'accueil' %}" style="color:var(--bleu)">← Retour à l'application</a></p>
+{% else %}
+<p class="sous">
+  {% if defini %}Un code de récupération est défini pour votre compte.
+  Vous pouvez en générer un nouveau (l'ancien cessera de fonctionner) ou le supprimer.
+  {% else %}Aucun code n'est défini. Générez-en un <b>avant</b> d'en avoir besoin :
+  si vous oubliez votre mot de passe, il vous permettra d'en choisir un nouveau.{% endif %}
+</p>
+
+{% if erreur %}<ul class="erreurs"><li>{{ erreur }}</li></ul>{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  <div class="champ">
+    <label for="motdepasse">Votre mot de passe actuel</label>
+    <input type="password" id="motdepasse" name="motdepasse" autocomplete="current-password" autofocus>
+  </div>
+  <button type="submit" name="action" value="generer">{% if defini %}Générer un nouveau code{% else %}Générer mon code{% endif %}</button>
+  {% if defini %}
+  <button type="submit" name="action" value="supprimer" style="margin-top:8px;background:transparent;border:1px solid #343a45;color:var(--doux)">Supprimer le code</button>
+  {% endif %}
+</form>
+<p class="aide"><a href="{% url 'accueil' %}" style="color:var(--bleu)">← Retour à l'application</a></p>
+{% endif %}
+{% endblock %}

@@ -45,11 +45,22 @@ class Composition(BaseStock):
                                                  mission="Jamais créée",
                                                  nom="Équipe A"))
 
-    def test_reserve_aux_administrateurs(self):
+    def test_reserve_aux_gestionnaires_et_aux_administrateurs(self):
+        """Composer les équipes revient à la gestion de la mission, plus aux seuls
+        administrateurs : un tiers est refusé, un administrateur passe."""
         with self.assertRaises(ErreurAction) as capture:
-            executer("mission.equipe.creer", self.UTILISATEUR,
+            executer("mission.equipe.creer", "Quelqu'un d'autre",
                      {"mission": "Chantier Nord", "nom": "Équipe A"}, False)
-        self.assertIn("réservée aux administrateurs", str(capture.exception))
+        self.assertIn("Réservé aux gestionnaires", str(capture.exception))
+        executer("mission.equipe.creer", "Quelqu'un d'autre",
+                 {"mission": "Chantier Nord", "nom": "Équipe A"}, True)
+        self.assertEqual(Equipe.objects.count(), 1)
+
+    def test_le_gestionnaire_de_la_mission_compose_ses_equipes(self):
+        """Le créateur de la mission en est le gestionnaire par défaut."""
+        executer("mission.equipe.creer", self.UTILISATEUR,
+                 {"mission": "Chantier Nord", "nom": "Équipe A"}, False)
+        self.assertEqual(Equipe.objects.count(), 1)
 
     # -- renommage --------------------------------------------------------
 

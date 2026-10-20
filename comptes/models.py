@@ -69,6 +69,18 @@ class Compte(AbstractBaseUser, PermissionsMixin):
                   "tant que ce drapeau est levé.")
     cree_le = models.DateTimeField("créé le", default=timezone.now)
     derniere_visite = models.DateTimeField("dernière visite", null=True, blank=True)
+    # Les réglages d'affichage de la personne : ils la suivent d'un poste à
+    # l'autre, et chaque compte retrouve les siens en se connectant.
+    reglages = models.JSONField("réglages", default=dict, blank=True)
+
+    # Récupération d'un mot de passe oublié (voir comptes/recuperation.py). Le
+    # code n'est jamais stocké en clair : `code_recuperation` en est l'empreinte.
+    code_recuperation = models.CharField("empreinte du code de récupération",
+                                         max_length=300, blank=True, default="")
+    recuperation_echecs = models.PositiveSmallIntegerField(
+        "essais de récupération ratés", default=0)
+    recuperation_bloque_jusqu = models.DateTimeField(
+        "récupération verrouillée jusqu'à", null=True, blank=True)
 
     # `is_staff` gouverne l'accès à /admin/ et rien d'autre : être
     # administrateur du stock n'ouvre pas l'administration Django, qui permet

@@ -57,7 +57,8 @@ def _mission_json(m):
 def _emprunt_json(r):
     entree = {"qty": r.qty, "mission": r.mission, "by": r.taken_by,
               "iso": iso(r.taken_at), "pack": r.pack or "",
-              "equipe": r.equipe or ""}
+              "equipe": r.equipe or "", "sacDe": r.sac_de or "",
+              "forcePar": r.force_par or ""}
     if r.returned_by or r.returned_at:
         entree["returned"] = {"by": r.returned_by or "",
                               "iso": iso(r.returned_at)}

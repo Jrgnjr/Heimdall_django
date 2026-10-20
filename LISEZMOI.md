@@ -267,8 +267,8 @@ Un déplacement laisse une ligne `AJUST.` au journal, qui dit d'où vers où.
 
 ### Restituer
 
-« Libérer tout » rend la mission entière. Chaque équipe a son propre bouton
-« Libérer », qui ne rend que le sien. Les consommables se déclarent utilisés
+« Restituer tout » rend la mission entière. Chaque équipe a son propre bouton
+« Restituer », qui ne rend que le sien. Les consommables se déclarent utilisés
 dans les deux cas, de la même façon.
 
 ### Ce qui est refusé

@@ -107,7 +107,11 @@ class ContratAPI(TestCase):
         d = self.client.get(reverse("api_state"), {"since": 1}).json()
         self.assertEqual(d, {"changed": False, "version": 1, "user": "Admin",
                              "admin": True, "comptes": ["Admin"],
-                             "dotations": {}})
+                             "reglages": {}, "dotations": {},
+                             "pret": {"recues": [], "emises": [], "prets": [], "sacs": {},
+                                      "missions": []},
+                             "plancherMissions": {}, "gestionMissions": {},
+                             "annuaire": ["Admin"]})
 
     def test_un_retard_trop_grand_renvoie_l_etat_complet(self):
         """Sans les opérations intermédiaires, un différentiel mentirait."""

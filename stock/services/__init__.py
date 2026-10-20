@@ -43,6 +43,7 @@ ACTIONS_ADMINISTRATEUR = {
     "materiel.creer",
     "materiel.reception",
     "materiel.seuil",
+    "materiel.ajuster",
     "materiel.identifiants",
     "materiel.creer.lot",
     "telephone.supprimer",
@@ -54,13 +55,10 @@ ACTIONS_ADMINISTRATEUR = {
     # Le sac de dotation engage ce qu'une personne détient durablement : le
     # composer relève de l'encadrement, pas du travail quotidien.
     "compte.dotations",
-    # Composer les équipes d'une mission, c'est de l'organisation. Y répartir
-    # le matériel, non : `materiel.equipe.affecter` reste ouvert à tous, comme
-    # emprunter.
-    "mission.equipe.creer",
-    "mission.equipe.renommer",
-    "mission.equipe.supprimer",
-    "mission.equipe.membres",
+    # Composer les équipes d'une mission, c'est de l'organisation : réservé à ses
+    # gestionnaires et aux administrateurs — le contrôle est dans chaque action
+    # (`gestion.exiger_gestion`), qui connaît la mission visée. Y répartir le
+    # matériel, non : `materiel.equipe.affecter` reste ouvert à tous.
 }
 
 
@@ -82,7 +80,7 @@ def charger():
     pas encore chargés au moment où ce paquet l'est.
     """
     from . import (armoires, dotations, equipes, materiel,  # noqa: F401
-                   missions, packs, telephones, templates)
+                   missions, packs, prets, telephones, templates)
 
 
 def executer(nom, utilisateur, params, administrateur=False):
@@ -96,4 +94,16 @@ def executer(nom, utilisateur, params, administrateur=False):
         raise ErreurAction("Action inconnue : %s." % nom)
     if nom in ACTIONS_ADMINISTRATEUR and not administrateur:
         raise ErreurAction("Cette action est réservée aux administrateurs.")
-    return fn(utilisateur, params)
+    # Le droit réel de l'appelant, posé **sur les paramètres eux-mêmes** et écrasant
+    # toute valeur venue du client : il ne peut pas se l'attribuer. Les paramètres
+    # d'origine sont conservés (et non copiés) parce que certaines actions les
+    # modifient en place — pour ne pas garder un fichier entier dans l'historique —
+    # et que l'appelant doit voir ce changement. La clé est retirée au retour : elle
+    # n'a pas à figurer dans l'historique.
+    if params is None:
+        params = {}
+    params["_administrateur"] = bool(administrateur)
+    try:
+        return fn(utilisateur, params)
+    finally:
+        params.pop("_administrateur", None)

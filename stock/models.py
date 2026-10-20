@@ -22,6 +22,7 @@ Trois partis pris qui reviennent partout :
 """
 
 from django.db import models
+from django.utils import timezone
 
 
 # --------------------------------------------------------------------------
@@ -367,6 +368,15 @@ class MaterialReservation(models.Model):
     taken_at = models.DateTimeField("pris le", null=True, blank=True)
     returned_at = models.DateTimeField("rendu le", null=True, blank=True)
     pack = models.CharField(max_length=200, blank=True, default="")
+    # Le compte dont le sac a prêté cet article, ou vide : un emprunt au stock
+    # commun n'a pas de prêteur. C'est ce qui permet, au retour, de savoir à qui
+    # revient la chose, et d'afficher le prêt chez celui qui l'a consenti.
+    sac_de = models.CharField("prêté par le sac de", max_length=150,
+                              blank=True, default="", db_index=True)
+    # Qui a **forcé** ce prêt, quand un gestionnaire de mission l'a accordé sans
+    # attendre la réponse de celui dont le sac a prêté. Vide pour un prêt consenti.
+    force_par = models.CharField("prêt forcé par", max_length=150,
+                                 blank=True, default="")
 
     class Meta:
         db_table = "stock_materialreservation"
@@ -417,6 +427,51 @@ class MaterialLog(models.Model):
 
 
 # --------------------------------------------------------------------------
+# Demandes de prêt dans un sac
+# --------------------------------------------------------------------------
+
+class DemandePret(models.Model):
+    """Une demande de matériel personnel, adressée à la personne qui le détient.
+
+    Le contenu d'un sac appartient à la personne : on ne s'y sert pas, on le lui
+    **demande**. Elle accepte — le matériel sort alors à l'emprunteur, comme
+    n'importe quel emprunt, et figure dans ses prêts — ou elle refuse, en
+    donnant au besoin sa raison.
+
+    Comptes et mission sont des chaînes, pas des clés étrangères : comme pour les
+    emprunts, ce qui s'est dit doit rester lisible même si un compte ou une
+    mission disparaît ensuite.
+    """
+
+    EN_ATTENTE = "EN ATTENTE"
+    ACCEPTEE = "ACCEPTÉE"
+    REFUSEE = "REFUSÉE"
+    ANNULEE = "ANNULÉE"
+
+    demandeur = models.CharField(max_length=150, db_index=True)
+    proprietaire = models.CharField("sollicité", max_length=150, db_index=True)
+    material_id = models.CharField("exemplaire", max_length=200)
+    quantite = models.IntegerField("quantité", default=1)
+    mission = models.CharField(max_length=200, default="—")
+    motif = models.CharField(max_length=300, blank=True, default="")
+    statut = models.CharField(max_length=20, default=EN_ATTENTE, db_index=True)
+    raison_refus = models.CharField("raison du refus", max_length=300,
+                                    blank=True, default="")
+    cree_le = models.DateTimeField(default=timezone.now)
+    repondu_le = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "stock_demande_pret"
+        ordering = ["-cree_le", "-id"]
+        verbose_name = "demande de prêt"
+        verbose_name_plural = "demandes de prêt"
+
+    def __str__(self):
+        return "%s → %s : %d × %s (%s)" % (self.demandeur, self.proprietaire,
+                                         self.quantite, self.material_id, self.statut)
+
+
+# --------------------------------------------------------------------------
 # Missions
 # --------------------------------------------------------------------------
 
@@ -428,10 +483,11 @@ class Mission(models.Model):
     parce qu'un emprunt la nomme est implicite, et disparaît avec lui.
     """
 
+    ANNULEE = "ANNULÉE"
     PREVUE = "PRÉVUE"
     EN_COURS = "EN COURS"
     TERMINEE = "TERMINÉE"
-    STATUTS = (PREVUE, EN_COURS, TERMINEE)
+    STATUTS = (PREVUE, EN_COURS, TERMINEE, ANNULEE)
     SANS_MISSION = "—"
 
     name = models.CharField(max_length=200, primary_key=True)
@@ -442,6 +498,10 @@ class Mission(models.Model):
                                        null=True, blank=True)
     archived = models.BooleanField("archivée", default=False)
     planned_date = models.DateField("date prévue", null=True, blank=True)
+    # Le plus haut statut atteint (prévue < en cours < terminée) : le statut
+    # affiché n'en descend jamais. Voir `services/statuts.py`.
+    status_max = models.CharField("plus haut statut atteint", max_length=40,
+                                  null=True, blank=True)
 
     class Meta:
         db_table = "stock_mission"
@@ -453,6 +513,63 @@ class Mission(models.Model):
 
     def __str__(self):
         return self.name
+
+    def statut(self, lignes, aujourdhui):
+        """Le statut affiché, qui avance seul avec la date et les emprunts.
+
+        Un statut imposé à la main l'emporte toujours. Sinon, tant que la date
+        prévue n'est pas arrivée la mission reste prévue, même si du matériel
+        lui est déjà réservé ; à partir de ce jour elle est en cours, et elle
+        se termine quand tout ce qui lui était affecté est rendu.
+
+        Le résultat n'est jamais inférieur au plus haut statut déjà atteint
+        (`status_max`) : une mission en cours ne redevient pas prévue parce
+        qu'on a rendu son dernier emprunt ou repoussé sa date.
+
+        `lignes` : les emprunts de la mission. Doit rester identique à
+        `statutMission()` d'index.html.
+        """
+        if self.status_override in self.STATUTS:
+            return self.status_override
+        if self.planned_date and self.planned_date > aujourdhui:
+            calcule = self.PREVUE
+        elif lignes:
+            calcule = (self.TERMINEE if all(not l.ouvert for l in lignes)
+                       else self.EN_COURS)
+        else:
+            calcule = self.EN_COURS if self.planned_date else self.PREVUE
+        ordre = (self.PREVUE, self.EN_COURS, self.TERMINEE)
+        if (self.status_max in ordre
+                and ordre.index(self.status_max) > ordre.index(calcule)):
+            return self.status_max
+        return calcule
+
+
+class GestionMission(models.Model):
+    """Un gestionnaire d'une mission.
+
+    Voir `services/gestion.py` : on est gestionnaire **ou** effectif d'une mission,
+    jamais les deux. Le compte est une chaîne, comme partout où l'on désigne une
+    personne dans un historique : la ligne reste lisible si le compte disparaît.
+    """
+
+    mission = models.ForeignKey(Mission, on_delete=models.CASCADE,
+                                db_column="mission_name",
+                                related_name="gestionnaires", db_index=True)
+    compte = models.CharField(max_length=150)
+
+    class Meta:
+        db_table = "stock_mission_gestionnaire"
+        ordering = ["mission_id", "compte"]
+        constraints = [
+            models.UniqueConstraint(fields=["mission", "compte"],
+                                    name="gestionnaire_unique_par_mission"),
+        ]
+        verbose_name = "gestionnaire de mission"
+        verbose_name_plural = "gestionnaires de mission"
+
+    def __str__(self):
+        return "%s gère %s" % (self.compte, self.mission_id)
 
 
 class Equipe(models.Model):

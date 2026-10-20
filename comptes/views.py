@@ -12,11 +12,17 @@ from django.contrib.auth import logout as fermer_session
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import AuthenticationForm, SetPasswordForm
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.shortcuts import redirect, render
+from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
-from .models import ActiviteCompte
+from . import onglets
+from . import recuperation
+from .models import ActiviteCompte, Compte
 
 
 class FormulaireConnexion(AuthenticationForm):
@@ -59,8 +65,14 @@ def connexion(request):
             messages.info(request,
                           "Ce mot de passe vous a été attribué : "
                           "remplacez-le avant de continuer.")
-            return redirect("mot_de_passe")
-        return redirect(request.GET.get("next") or "accueil")
+            return redirect(onglets.vers_compte(
+                request, reverse("mot_de_passe"), compte.identifiant))
+        suite = request.GET.get("next") or ""
+        if not suite or not url_has_allowed_host_and_scheme(
+                suite, allowed_hosts={request.get_host()}):
+            suite = reverse("accueil")
+        # L'onglet devient celui du compte : `/u/Admin/…`.
+        return redirect(onglets.vers_compte(request, suite, compte.identifiant))
 
     return render(request, "comptes/connexion.html", {"formulaire": formulaire})
 
@@ -106,3 +118,88 @@ def deconnexion(request):
     """
     fermer_session(request)
     return redirect("connexion")
+
+
+# --------------------------------------------------------------------------
+# Mot de passe oublié
+# --------------------------------------------------------------------------
+
+# Un seul message pour tous les échecs : compte inconnu, code absent ou faux,
+# récupération verrouillée. Les distinguer dirait à qui essaie quels comptes
+# existent, et lesquels ont un code.
+ECHEC_RECUPERATION = ("Identifiant ou code de récupération incorrect — ou trop "
+                      "d'essais récents. Réessayez dans quelques minutes.")
+
+
+def mot_de_passe_oublie(request):
+    """Choisir un nouveau mot de passe avec son code de récupération.
+
+    Sans session : la personne ne peut, par définition, plus se connecter.
+    """
+    erreurs = []
+    identifiant = ""
+    if request.method == "POST":
+        identifiant = (request.POST.get("identifiant") or "").strip()
+        code = request.POST.get("code") or ""
+        mdp1 = request.POST.get("password1") or ""
+        mdp2 = request.POST.get("password2") or ""
+
+        compte = Compte.objects.filter(pk=identifiant, actif=True).first()
+        if not recuperation.verifier(compte, code, timezone.now()):
+            erreurs.append(ECHEC_RECUPERATION)
+        elif mdp1 != mdp2:
+            erreurs.append("Les deux mots de passe ne correspondent pas.")
+        else:
+            try:
+                validate_password(mdp1, user=compte)
+            except ValidationError as refus:
+                erreurs.extend(refus.messages)
+            else:
+                compte.set_password(mdp1)
+                compte.doit_changer = False
+                compte.save(update_fields=["password", "doit_changer"])
+                # Le code est à usage unique. Changer le mot de passe referme
+                # aussi les sessions ouvertes : leur empreinte ne correspond plus.
+                recuperation.retirer(compte)
+                ActiviteCompte.objects.create(
+                    acteur=compte.identifiant,
+                    action="mot de passe réinitialisé (code de récupération)",
+                    nouveau_nom=compte.identifiant)
+                messages.success(request,
+                                 "Mot de passe modifié. Connectez-vous avec le "
+                                 "nouveau, puis générez un nouveau code de "
+                                 "récupération dans vos réglages.")
+                return redirect("connexion")
+    return render(request, "comptes/mot_de_passe_oublie.html", {
+        "erreurs": erreurs, "identifiant": identifiant})
+
+
+@login_required
+def code_recuperation(request):
+    """Générer, regénérer ou supprimer son code de récupération.
+
+    Le mot de passe actuel est redemandé : une session laissée ouverte ne doit
+    pas suffire à se donner un code, et à reprendre le compte ensuite.
+    """
+    if request.user.doit_changer:
+        return redirect("mot_de_passe")
+    compte = request.user
+    erreur = ""
+    code = ""
+    if request.method == "POST":
+        if not compte.check_password(request.POST.get("motdepasse") or ""):
+            erreur = "Mot de passe actuel incorrect."
+        elif request.POST.get("action") == "supprimer":
+            recuperation.retirer(compte)
+            ActiviteCompte.objects.create(
+                acteur=compte.identifiant, action="code de récupération supprimé",
+                nouveau_nom=compte.identifiant)
+            messages.success(request, "Code de récupération supprimé.")
+            return redirect("code_recuperation")
+        else:
+            code = recuperation.definir(compte)
+            ActiviteCompte.objects.create(
+                acteur=compte.identifiant, action="code de récupération généré",
+                nouveau_nom=compte.identifiant)
+    return render(request, "comptes/code_recuperation.html", {
+        "defini": bool(compte.code_recuperation), "code": code, "erreur": erreur})

@@ -1,0 +1,41 @@
+{% extends "comptes/base.html" %}
+{% block titre %}Mot de passe oublié · Heimdall{% endblock %}
+{% block contenu %}
+<h1>Mot de passe oublié</h1>
+<p class="sous">Entrez votre code de récupération pour choisir un nouveau mot de passe.</p>
+
+{% if erreurs %}
+<ul class="erreurs">
+  {% for erreur in erreurs %}<li>{{ erreur }}</li>{% endfor %}
+</ul>
+{% endif %}
+
+<form method="post" novalidate>
+  {% csrf_token %}
+  <div class="champ">
+    <label for="identifiant">Identifiant</label>
+    <input type="text" id="identifiant" name="identifiant" value="{{ identifiant }}" autocomplete="username" autofocus>
+  </div>
+  <div class="champ">
+    <label for="code">Code de récupération</label>
+    <input type="text" id="code" name="code" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX-XXXX" style="font-family:ui-monospace,Consolas,monospace;letter-spacing:.06em">
+  </div>
+  <div class="champ">
+    <label for="password1">Nouveau mot de passe</label>
+    <input type="password" id="password1" name="password1" autocomplete="new-password">
+  </div>
+  <div class="champ">
+    <label for="password2">Confirmation</label>
+    <input type="password" id="password2" name="password2" autocomplete="new-password">
+  </div>
+  <button type="submit">Changer le mot de passe</button>
+</form>
+<div class="aide">
+  <ul>
+    <li>Au moins 8 caractères, pas uniquement des chiffres.</li>
+    <li>Le code se génère dans vos réglages, tant que vous êtes connecté. Il ne sert qu'une fois.</li>
+    <li>Pas de code ? Demandez à un administrateur de réinitialiser votre mot de passe.</li>
+  </ul>
+</div>
+<p class="aide"><a href="{% url 'connexion' %}" style="color:var(--bleu)">← Retour à la connexion</a></p>
+{% endblock %}

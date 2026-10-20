@@ -169,3 +169,170 @@ class Templates(BaseStock):
         self.agir("mission.template.supprimer", nom="Intervention type")
         self.assertEqual(MissionTemplate.objects.count(), 0)
         self.assertEqual(MissionTemplateItem.objects.count(), 0)
+
+
+class TableauDeMission(BaseStock):
+    """La page de lien partagé : une fiche en lecture seule, derrière la session."""
+
+    def _url(self, nom):
+        from django.urls import reverse
+        return reverse("mission_tableau", args=[nom])
+
+    def test_exige_une_session(self):
+        self.agir("mission.creer", nom="Chantier Nord")
+        reponse = self.client.get(self._url("Chantier Nord"))
+        self.assertEqual(reponse.status_code, 302)
+        self.assertTrue(reponse["Location"].startswith("/connexion/"))
+
+    def test_affiche_la_mission(self):
+        self.agir("mission.creer", nom="Chantier Nord")
+        self.client.force_login(self.compte)
+        reponse = self.client.get(self._url("Chantier Nord"))
+        self.assertEqual(reponse.status_code, 200)
+        self.assertContains(reponse, "Chantier Nord")
+        self.assertContains(reponse, "PRÉVUE")
+
+    def test_mission_inconnue(self):
+        self.client.force_login(self.compte)
+        self.assertEqual(self.client.get(self._url("Fantôme")).status_code, 404)
+
+    def test_nom_avec_barre_oblique(self):
+        self.agir("mission.creer", nom="Nord/Sud")
+        self.client.force_login(self.compte)
+        self.assertEqual(self.client.get(self._url("Nord/Sud")).status_code, 200)
+
+
+class StatutSelonLaDate(BaseStock):
+    """Le statut avance seul : la date prévue, puis les emprunts."""
+
+    def setUp(self):
+        super().setUp()
+        import datetime
+        self.jour = datetime.date(2026, 10, 20)
+        self.veille = self.jour - datetime.timedelta(days=1)
+
+    def _mission(self, **champs):
+        return Mission(name="M", **champs)
+
+    def test_prevue_tant_que_la_date_n_est_pas_arrivee(self):
+        m = self._mission(planned_date=self.jour)
+        self.assertEqual(m.statut([], self.veille), Mission.PREVUE)
+
+    def test_en_cours_le_jour_venu(self):
+        m = self._mission(planned_date=self.jour)
+        self.assertEqual(m.statut([], self.jour), Mission.EN_COURS)
+
+    def test_sans_date_elle_reste_prevue(self):
+        self.assertEqual(self._mission().statut([], self.jour), Mission.PREVUE)
+
+    def test_du_materiel_reserve_ne_devance_pas_la_date(self):
+        class Ligne:
+            ouvert = True
+        m = self._mission(planned_date=self.jour)
+        self.assertEqual(m.statut([Ligne()], self.veille), Mission.PREVUE)
+        self.assertEqual(m.statut([Ligne()], self.jour), Mission.EN_COURS)
+
+    def test_tout_rendu_termine_la_mission(self):
+        class Ligne:
+            ouvert = False
+        m = self._mission(planned_date=self.jour)
+        self.assertEqual(m.statut([Ligne()], self.jour), Mission.TERMINEE)
+
+    def test_un_statut_impose_l_emporte(self):
+        m = self._mission(planned_date=self.jour, status_override=Mission.PREVUE)
+        self.assertEqual(m.statut([], self.jour), Mission.PREVUE)
+
+
+class DesassignerDuMateriel(BaseStock):
+    """Désassigner, dans une mission prévue, c'est rendre le matériel."""
+
+    def setUp(self):
+        super().setUp()
+        import datetime
+        # Prévue : sa date est dans le futur. C'est le seul état où l'on peut
+        # encore désassigner du matériel.
+        self.mission().planned_date = None
+        Mission.objects.filter(pk="Chantier Nord").update(
+            planned_date=datetime.date.today() + datetime.timedelta(days=10))
+        self.agir("materiel.emprunt", nom="Chargeur USB-C 20 W", qty=2,
+                  mission="Chantier Nord")
+
+    def lignes(self):
+        return MaterialReservation.objects.filter(material_id="Chargeur USB-C 20 W")
+
+    def desassigner(self, **plus):
+        return self.agir("materiel.mission.desassigner",
+                         nom="Chargeur USB-C 20 W", index=0, **plus)
+
+    def test_le_materiel_est_rendu_au_stock(self):
+        sorti = self.dispo("Chargeur USB-C 20 W")
+        self.desassigner()
+        self.assertEqual(self.dispo("Chargeur USB-C 20 W"), sorti + 2)
+
+    def test_la_ligne_disparait_de_la_mission(self):
+        from stock.services.materiel import emprunts_ouverts_de_mission
+        self.desassigner()
+        self.assertEqual(self.lignes().count(), 0)
+        self.assertEqual(emprunts_ouverts_de_mission("Chantier Nord"), [])
+
+    def test_la_mission_videe_reste_prevue_meme_le_jour_de_sa_date(self):
+        """Une ligne fermée aurait fait calculer « terminée » une mission vide."""
+        from stock.services.statuts import statut_de
+        import datetime
+        self.desassigner()
+        Mission.objects.filter(pk="Chantier Nord").update(
+            planned_date=datetime.date.today())
+        self.assertEqual(statut_de("Chantier Nord"), "EN COURS")   # pas « terminée »
+
+    def test_c_est_journalise_comme_un_retour(self):
+        from stock.models import MaterialLog
+        self.desassigner()
+        ligne = MaterialLog.objects.filter(kind="RETOUR").last()
+        self.assertEqual((ligne.mission, ligne.qty), ("Chantier Nord", 2))
+        self.assertIn("Désassigné", ligne.commentaire)
+
+    def test_une_ligne_sans_mission_est_refusee(self):
+        self.agir("materiel.emprunt", nom="Chargeur USB-C 20 W", qty=1)
+        self.assertIn("aucune mission", self.refus(
+            "materiel.mission.desassigner", nom="Chargeur USB-C 20 W", index=1))
+
+    def test_une_ligne_rendue_est_refusee(self):
+        from django.utils import timezone
+        MaterialReservation.objects.filter(material_id="Chargeur USB-C 20 W").update(
+            returned_by="42", returned_at=timezone.now())
+        self.assertIn("déjà rendue", self.refus(
+            "materiel.mission.desassigner", nom="Chargeur USB-C 20 W", index=0))
+
+    def test_une_ligne_modifiee_entre_temps_est_refusee(self):
+        self.assertIn("modifiée par quelqu'un d'autre", self.refus(
+            "materiel.mission.desassigner", nom="Chargeur USB-C 20 W", index=0,
+            empreinte="99|Autre|Quelqu'un"))
+        self.assertEqual(self.lignes().count(), 1)
+
+    def test_l_empreinte_juste_est_acceptee(self):
+        self.desassigner(empreinte="2|Chantier Nord|%s" % self.UTILISATEUR)
+        self.assertEqual(self.lignes().count(), 0)
+
+    def test_tout_utilisateur_peut_desassigner(self):
+        self.agir("materiel.mission.desassigner", _administrateur=False,
+                  nom="Chargeur USB-C 20 W", index=0)
+        self.assertEqual(self.lignes().count(), 0)
+
+    def test_un_pret_de_sac_regagne_le_sac(self):
+        from comptes.models import Compte, Dotation
+        from stock.models import DemandePret
+        from stock.services import executer
+        from stock.services.prets import etat_prets
+        Compte.objects.create_user("Bob", password="x" * 10, doit_changer=False)
+        Dotation.objects.create(compte_id="Bob", ordre=1,
+                                material_id="Kit outils démontage", quantite=2)
+        executer("pret.demander", self.UTILISATEUR, {
+            "proprietaire": "Bob", "article": "Kit outils démontage", "qty": 1,
+            "mission": "Chantier Nord"}, True)
+        executer("pret.accepter", "Bob", {"id": DemandePret.objects.get().pk}, False)
+        self.assertEqual(len(etat_prets("Bob")["prets"]), 1)
+        index = MaterialReservation.objects.filter(
+            material_id="Kit outils démontage").first()
+        self.agir("materiel.mission.desassigner", nom="Kit outils démontage", index=0)
+        self.assertEqual(etat_prets("Bob")["prets"], [])
+        self.assertEqual(etat_prets(self.UTILISATEUR)["sacs"]["Bob"][0]["disponible"], 2)

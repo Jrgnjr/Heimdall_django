@@ -113,3 +113,27 @@ class AmorcageAdmin(TestCase):
     def test_un_identifiant_choisi_est_respecte(self):
         self.amorcer(identifiant="Patron")
         self.assertTrue(Compte.objects.get(identifiant="Patron").administrateur)
+
+
+class IconeDeLOnglet(TestCase):
+    """Le navigateur doit trouver l'icône, avec ou sans balise."""
+
+    def test_favicon_redirige_vers_le_fichier_statique(self):
+        reponse = self.client.get("/favicon.ico")
+        self.assertEqual(reponse.status_code, 301)
+        self.assertIn("heimdall", reponse["Location"])
+
+    def test_favicon_n_est_pas_pris_pour_une_page_d_onglet(self):
+        from django.test import override_settings
+        with override_settings(ONGLETS_ISOLES=True):
+            reponse = self.client.get("/favicon.ico")
+        self.assertNotRegex(reponse["Location"], r"/s-[0-9a-f]{12}/")
+
+    def test_la_page_principale_declare_son_icone(self):
+        from comptes.models import Compte
+        Compte.objects.create_user("Alice", password="motdepasse-de-test",
+                                   doit_changer=False)
+        self.client.login(identifiant="Alice", password="motdepasse-de-test")
+        page = self.client.get("/").content.decode()
+        self.assertIn('rel="icon"', page)
+        self.assertIn("heimdall.ico", page)

@@ -107,6 +107,38 @@ class Consommables(BaseStock):
         self.agir("materiel.seuil", nom="Gants nitrile", seuil=0)
         self.assertEqual(self.article("Gants nitrile").seuil, 0)
 
+    def test_le_seuil_d_un_groupe_vaut_pour_tous_ses_exemplaires(self):
+        Material.objects.create(name="Cartouche", ordre=20, cat="Consommable",
+                                qty=1, seuil=0, affectation="Commun",
+                                libelle="Cartouche", numero_serie="A1")
+        Material.objects.create(name="Cartouche #2", ordre=21, cat="Consommable",
+                                qty=1, seuil=0, affectation="Commun",
+                                libelle="Cartouche", numero_serie="A2")
+        self.agir("materiel.seuil", libelle="Cartouche", seuil=5)
+        self.assertEqual(self.article("Cartouche").seuil, 5)
+        self.assertEqual(self.article("Cartouche #2").seuil, 5)
+
+    def test_seuil_d_un_groupe_inconnu_refuse(self):
+        self.refus("materiel.seuil", libelle="Fantôme", seuil=5)
+
+    def test_ajuster_le_stock_fixe_la_valeur_et_journalise(self):
+        from stock.models import MaterialLog
+        avant = self.article("Gants nitrile").qty
+        self.agir("materiel.ajuster", nom="Gants nitrile", qty=avant + 7)
+        self.assertEqual(self.article("Gants nitrile").qty, avant + 7)
+        ligne = MaterialLog.objects.filter(kind="AJUST.").last()
+        self.assertEqual(ligne.qty, 7)
+        self.assertIn("de %d à %d" % (avant, avant + 7), ligne.commentaire)
+
+    def test_ajuster_sous_ce_qui_est_sorti_refuse(self):
+        self.sortir("Gants nitrile", 5)
+        message = self.refus("materiel.ajuster", nom="Gants nitrile", qty=4)
+        self.assertIn("sorties", message)
+        self.agir("materiel.ajuster", nom="Gants nitrile", qty=5)
+
+    def test_ajuster_negatif_refuse(self):
+        self.refus("materiel.ajuster", nom="Gants nitrile", qty=-1)
+
     def test_un_seuil_negatif_refuse(self):
         self.refus("materiel.seuil", nom="Gants nitrile", seuil=-1)
 

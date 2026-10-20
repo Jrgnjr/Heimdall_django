@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Heimdall — Mon profil</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.app{font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.45;background:var(--bg);color:var(--ink)}
+.t-dark{--bg:#0c0e12;--surface:#12161c;--raised:#1a1f28;--line:#232a36;--ink:#f2f4f8;--soft:#c4c9d1;--muted:#8d94a0;--gold:#c29a62;--gold-ink:#0c0e12;--gold-soft:rgba(194,154,98,.14);--ok:#5cc595;--ok-bg:rgba(92,197,149,.12);--warn:#e8ac45;--warn-bg:rgba(232,172,69,.13);--danger:#f07575;--danger-bg:rgba(240,117,117,.12);--info:#9db3d4;--info-bg:rgba(157,179,212,.12)}
+.t-light{--bg:#f5f6f8;--surface:#ffffff;--raised:#eef1f5;--line:#e1e5eb;--ink:#1a1f28;--soft:#3e4653;--muted:#646b78;--gold:#8a6638;--gold-ink:#ffffff;--gold-soft:rgba(138,102,56,.10);--ok:#1c7d52;--ok-bg:rgba(28,125,82,.10);--warn:#985b06;--warn-bg:rgba(152,91,6,.10);--danger:#b83232;--danger-bg:rgba(184,50,50,.09);--info:#44608a;--info-bg:rgba(68,96,138,.10)}
+a{color:var(--gold)}a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--soft);font:inherit;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;box-sizing:border-box}
+.btn:hover{background:var(--raised);color:var(--ink)}
+.btn-primary{background:var(--gold);border-color:var(--gold);color:var(--gold-ink);font-weight:600}
+.btn-primary:hover{background:var(--gold);color:var(--gold-ink);filter:brightness(1.08)}
+.btn-sm{height:30px;padding:0 10px;font-size:12.5px}
+.btn-ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn-icon{width:36px;padding:0}
+.badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-sizing:border-box}
+.b-loc{font-family:'JetBrains Mono',ui-monospace,monospace;text-transform:none;letter-spacing:0;font-weight:500;font-size:12px;color:var(--soft);background:var(--raised)}
+.b-warn{color:var(--warn);background:var(--warn-bg)}
+.b-ok{color:var(--ok);background:var(--ok-bg)}
+.b-danger{color:var(--danger);background:var(--danger-bg)}
+.b-info{color:var(--info);background:var(--info-bg)}
+.b-gold{color:var(--gold);background:var(--gold-soft)}
+.b-neutral{color:var(--soft);background:var(--raised)}
+.card{background:var(--surface);border-radius:12px;border:1px solid var(--line)}
+.over{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px}
+.num{font-variant-numeric:tabular-nums}
+.item{padding:12px 16px;border-top:1px solid var(--line)}
+.item:hover{background:var(--raised)}
+.chead{display:flex;align-items:center;gap:8px;padding:14px 16px 10px}
+.chead h2{margin:0;font-size:13.5px;font-weight:700;flex:1}
+.count{font-size:12px;color:var(--muted);font-weight:500}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+</style>
+</helmet>
+<div class="app {{themeClass}}" style="display: flex; flex-wrap: wrap; min-height: 1040px">
+  <div style="flex: 1 1 232px; max-width: 260px; background: var(--surface); border-right: 1px solid var(--line)">
+    <dc-import name="Sidebar" active="profil" theme="{{theme}}" hint-size="100%,1040px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 40px; box-sizing: border-box">
+    <div style="max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px">
+
+      <header style="display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px">
+        <div style="width: 56px; height: 56px; border-radius: 14px; background: var(--gold-soft); color: var(--gold); display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; flex-shrink: 0">AD</div>
+        <div style="flex: 1 1 240px">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.015em">Admin</h1>
+          <p style="margin: 2px 0 0; color: var(--muted); font-size: 13.5px">Administrateur du stock · Compte personnel</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px">
+          <button class="btn" type="button">Gérer les comptes</button>
+          <button class="btn btn-icon" type="button" aria-label="Personnaliser le tableau de bord"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg></button>
+          <button class="btn btn-primary" type="button">Rendre du matériel</button>
+        </div>
+      </header>
+
+      <section aria-label="Résumé" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px">
+        <div class="card" style="padding: 16px 18px">
+          <div class="over">Unités détenues</div>
+          <div class="num" style="font-size: 28px; font-weight: 700; margin-top: 4px">3</div>
+        </div>
+        <div class="card" style="padding: 16px 18px">
+          <div class="over">Lignes dans le sac</div>
+          <div class="num" style="font-size: 28px; font-weight: 700; margin-top: 4px">1</div>
+        </div>
+        <div class="card" style="padding: 16px 18px">
+          <div class="over">Sorties en cours</div>
+          <div class="num" style="font-size: 28px; font-weight: 700; margin-top: 4px">2</div>
+        </div>
+        <div class="card" style="padding: 16px 18px">
+          <div class="over">Missions actives</div>
+          <div class="num" style="font-size: 28px; font-weight: 700; margin-top: 4px">3</div>
+        </div>
+      </section>
+
+      <section aria-label="À recommander" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 18px; border-radius: 12px; background: var(--warn-bg)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--warn); flex-shrink: 0"><path d="M3 4h2l2.1 10.3a1.5 1.5 0 0 0 1.5 1.2h8.5a1.5 1.5 0 0 0 1.5-1.2L20.5 8H5.8"/><circle cx="9" cy="19.5" r="1.25"/><circle cx="17" cy="19.5" r="1.25"/><path d="M13 9.5v3.5M11.25 11.25h3.5"/></svg>
+        <div style="flex: 1 1 260px">
+          <strong style="color: var(--ink)">1 consommable à recommander</strong>
+          <span style="color: var(--soft)"> — Clé USB 64 Go · 5 en stock pour un seuil de 5</span>
+        </div>
+        <button class="btn btn-sm" type="button">Ouvrir les consommables</button>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+
+        <div style="flex: 999 1 620px; min-width: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; align-items: start">
+
+          <section class="card" aria-label="Sac de dotation">
+            <div class="chead"><h2>Sac de dotation</h2><span class="count">1</span></div>
+            <div class="item">
+              <div style="display: flex; gap: 8px; align-items: baseline">
+                <div style="flex: 1; font-weight: 600">SSD Samsung T9 2 To</div>
+                <span class="num" style="font-weight: 600">1 u.</span>
+              </div>
+              <div style="font-size: 12px; color: var(--muted); margin-top: 3px"><span class="mono">STO-001</span> · série <span class="mono">S7UBNJ0Y204512M</span></div>
+              <div style="margin-top: 8px"><span class="badge b-info">Prêté à Compte-001</span></div>
+            </div>
+          </section>
+
+          <section class="card" aria-label="Missions">
+            <div class="chead"><h2>Missions</h2><span class="count">3</span><a href="Missions.dc.html" style="font-size: 12.5px; font-weight: 600; text-decoration: none">Tout voir</a></div>
+            <sc-for list="{{missions}}" as="m" hint-placeholder-count="3">
+              <div class="item" style="display: flex; align-items: center; gap: 10px">
+                <div style="flex: 1; min-width: 0">
+                  <div style="font-weight: 600">{{m.name}}</div>
+                  <div style="font-size: 12px; color: var(--muted)">Prévue le {{m.date}}</div>
+                </div>
+                <span class="{{m.cls}}">{{m.status}}</span>
+              </div>
+            </sc-for>
+          </section>
+
+          <section class="card" aria-label="Sorties en cours">
+            <div class="chead"><h2>Sorties en cours</h2><span class="count">2</span></div>
+            <div class="item">
+              <div style="display: flex; gap: 8px; align-items: baseline"><div style="flex: 1; font-weight: 600">SSD Samsung T7 1 To</div><span class="num" style="font-weight: 600">1 u.</span></div>
+              <div style="font-size: 12px; color: var(--muted); margin-top: 3px"><span class="mono">STO-003</span> · série <span class="mono">S5YANS0R512901T</span> · depuis 1 jour</div>
+            </div>
+            <div class="item">
+              <div style="display: flex; gap: 8px; align-items: baseline"><div style="flex: 1; font-weight: 600">T9</div><span class="num" style="font-weight: 600">1 u.</span></div>
+              <div style="font-size: 12px; color: var(--muted); margin-top: 3px">Commun · série <span class="mono">QWERTY</span> · prêté par Compte-001 · depuis 22 h</div>
+            </div>
+          </section>
+
+          <section class="card" aria-label="Mes prêts">
+            <div class="chead"><h2>Mes prêts</h2><span class="count">1</span></div>
+            <div class="item" style="display: flex; align-items: center; gap: 10px">
+              <div style="flex: 1; min-width: 0">
+                <div style="font-weight: 600">SSD Samsung T9 2 To × 1</div>
+                <div style="font-size: 12px; color: var(--muted); margin-top: 3px">À Compte-001 · mission TEST · depuis 22 h</div>
+              </div>
+              <button class="btn btn-sm" type="button">Marquer rendu</button>
+            </div>
+          </section>
+
+          <section class="card" aria-label="Mes demandes">
+            <div class="chead"><h2>Mes demandes</h2><span class="count">1</span><button class="btn btn-sm btn-ghost" type="button" style="color: var(--gold)">+ Nouvelle</button></div>
+            <div class="item" style="display: flex; align-items: center; gap: 10px">
+              <div style="flex: 1; min-width: 0">
+                <div style="font-weight: 600">T9 × 1 → Compte-001</div>
+                <div style="font-size: 12px; color: var(--muted); margin-top: 3px">Mission TEST · « stockage »</div>
+              </div>
+              <span class="badge b-ok">Acceptée</span>
+            </div>
+          </section>
+
+          <section class="card" aria-label="Détenu depuis plus de 7 jours">
+            <div class="chead"><h2>Détenu depuis plus de 7 jours</h2><span class="count">0</span></div>
+            <div class="item" style="display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--ok); flex-shrink: 0"><path d="m5 12.5 4.5 4.5L19 7.5"/></svg>
+              Rien ne traîne : tout ce qui est sorti l'est depuis moins de 7 jours.
+            </div>
+          </section>
+        </div>
+
+        <div style="flex: 1 1 320px; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+          <section class="card" aria-label="Activité récente">
+            <div class="chead"><h2>Activité récente</h2><a href="Journal.dc.html" style="font-size: 12.5px; font-weight: 600; text-decoration: none">Journal</a></div>
+            <sc-for list="{{activity}}" as="a" hint-placeholder-count="10">
+              <div class="item" style="display: flex; align-items: center; gap: 10px; padding-top: 9px; padding-bottom: 9px">
+                <span class="{{a.cls}}" style="min-width: 74px; justify-content: center">{{a.type}}</span>
+                <div style="flex: 1; min-width: 0">
+                  <div style="font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{a.what}}</div>
+                  <div style="font-size: 11.5px; color: var(--muted)">{{a.sub}}</div>
+                </div>
+                <span class="num" style="font-size: 12px; color: var(--muted)">{{a.date}}</span>
+              </div>
+            </sc-for>
+          </section>
+
+          <section class="card" aria-label="Vue d'ensemble du stock" style="padding: 16px 18px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+            <div><div class="over">En armoire</div><div class="num" style="font-size: 22px; font-weight: 700">623</div></div>
+            <div><div class="over">Réf. actives</div><div class="num" style="font-size: 22px; font-weight: 700">45</div></div>
+            <div><div class="over">Matériel</div><div class="num" style="font-size: 22px; font-weight: 700">51</div></div>
+            <div><div class="over">À recommander</div><div class="num" style="font-size: 22px; font-weight: 700; color: var(--warn)">1</div></div>
+          </section>
+        </div>
+
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Sombre","Clair"],"default":"Sombre"},"$preview":{"width":1440,"height":1040}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const theme = this.props.theme ?? 'Sombre';
+    const missions = [
+      { name: 'test lien', date: '20/10/2026', status: 'En cours', cls: 'badge b-ok' },
+      { name: 'TEST', date: '21/10/2026', status: 'Prévue', cls: 'badge b-info' },
+      { name: 'TEST2', date: '22/10/2026', status: 'Prévue', cls: 'badge b-info' }
+    ];
+    const typeCls = { 'Sortie': 'badge b-warn', 'Retour': 'badge b-ok', 'Création': 'badge b-gold', 'Ajust.': 'badge b-neutral' };
+    const activity = [
+      ['Sortie', '1 × T9', 'TEST', '20/10'],
+      ['Retour', '1 × T9', 'test2', '20/10'],
+      ['Retour', '1 × T9', 'test2', '20/10'],
+      ['Création', '5 × Clé USB 64 Go', 'Séries TEST-001 à 005', '19/10'],
+      ['Sortie', '1 × SSD Samsung T7 1 To', 'Hors mission', '19/10'],
+      ['Ajust.', '1 × T9', 'test2', '30/09']
+    ].map(([type, what, sub, date]) => ({ type, what, sub, date, cls: typeCls[type] }));
+    return { theme, themeClass: theme === 'Clair' ? 't-light' : 't-dark', missions, activity };
+  }
+}
+</script>
+</body>
+</html>

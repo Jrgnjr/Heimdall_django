@@ -1,0 +1,34 @@
+/* Charte graphique de Heimdall — les jetons partagés par toutes les pages
+   (application, connexion, tableau d'une mission).
+
+   Un seul accent : le doré (--gold). Quatre couleurs d'état, qui ne se mélangent pas :
+     --ok      ce qui rentre, ce qui est accepté (entrée, retour, en cours)
+     --warn    ce qui est à traiter (non placé, stock bas, sortie, réservé)
+     --danger  ce qui détruit, ce qui échoue (suppression, erreur)
+     --info    ce qui est annoncé (prévu, information)
+   Le thème est posé sur <html data-theme="dark|light"> ; « auto » est résolu par un petit
+   script qui lit le réglage du système.
+   Typographie : Inter (texte) et JetBrains Mono (emplacements, étiquettes, séries), voir
+   polices.css. Tailles : h1 24/700 · h2 15/700 · texte 14 · secondaire 12–13 · sur-titres
+   11/600 en capitales espacées. Rayons : 6 badges · 8 boutons et champs · 12 cartes ·
+   999 pastilles. Chiffres : tabular-nums partout où il y a des quantités ou des dates. */
+:root{color-scheme:dark;
+  --bg:#0c0e12; --surface:#12161c; --raised:#1a1f28; --line:#232a36;
+  --ink:#f2f4f8; --soft:#c4c9d1; --muted:#8d94a0;
+  --gold:#c29a62; --gold-ink:#0c0e12; --gold-soft:rgba(194,154,98,.14);
+  --ok:#5cc595; --ok-bg:rgba(92,197,149,.12);
+  --warn:#e8ac45; --warn-bg:rgba(232,172,69,.13);
+  --danger:#f07575; --danger-bg:rgba(240,117,117,.12);
+  --info:#9db3d4; --info-bg:rgba(157,179,212,.12);
+}
+html[data-theme="light"]{color-scheme:light;
+  --bg:#f5f6f8; --surface:#ffffff; --raised:#eef1f5; --line:#e1e5eb;
+  --ink:#1a1f28; --soft:#3e4653; --muted:#646b78;
+  --gold:#8a6638; --gold-ink:#ffffff; --gold-soft:rgba(138,102,56,.10);
+  --ok:#1c7d52; --ok-bg:rgba(28,125,82,.10);
+  --warn:#985b06; --warn-bg:rgba(152,91,6,.10);
+  --danger:#b83232; --danger-bg:rgba(184,50,50,.09);
+  --info:#44608a; --info-bg:rgba(68,96,138,.10);
+}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+@media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;animation-iteration-count:1 !important;transition-duration:.001ms !important}}

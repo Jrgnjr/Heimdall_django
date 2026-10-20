@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Heimdall — Journal des mouvements</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.app{font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.45;background:var(--bg);color:var(--ink)}
+.t-dark{--bg:#0c0e12;--surface:#12161c;--raised:#1a1f28;--line:#232a36;--ink:#f2f4f8;--soft:#c4c9d1;--muted:#8d94a0;--gold:#c29a62;--gold-ink:#0c0e12;--gold-soft:rgba(194,154,98,.14);--ok:#5cc595;--ok-bg:rgba(92,197,149,.12);--warn:#e8ac45;--warn-bg:rgba(232,172,69,.13);--danger:#f07575;--danger-bg:rgba(240,117,117,.12);--info:#9db3d4;--info-bg:rgba(157,179,212,.12)}
+.t-light{--bg:#f5f6f8;--surface:#ffffff;--raised:#eef1f5;--line:#e1e5eb;--ink:#1a1f28;--soft:#3e4653;--muted:#646b78;--gold:#8a6638;--gold-ink:#ffffff;--gold-soft:rgba(138,102,56,.10);--ok:#1c7d52;--ok-bg:rgba(28,125,82,.10);--warn:#985b06;--warn-bg:rgba(152,91,6,.10);--danger:#b83232;--danger-bg:rgba(184,50,50,.09);--info:#44608a;--info-bg:rgba(68,96,138,.10)}
+a{color:var(--gold)}a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--soft);font:inherit;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;box-sizing:border-box}
+.btn:hover{background:var(--raised);color:var(--ink)}
+.btn-sm{height:30px;padding:0 10px;font-size:12.5px}
+.tab{display:inline-flex;align-items:center;gap:8px;height:32px;padding:0 14px;border-radius:8px;border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:500;cursor:pointer}
+.tab:hover{color:var(--ink)}
+.tab.on{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 0 0 1px var(--line)}
+.chip{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--soft);font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.chip:hover{color:var(--ink);background:var(--raised)}
+.chip.on{background:var(--gold-soft);border-color:var(--gold);color:var(--ink);font-weight:600}
+.dot{width:8px;height:8px;border-radius:999px;flex-shrink:0}
+.badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-sizing:border-box}
+.b-warn{color:var(--warn);background:var(--warn-bg)}
+.b-ok{color:var(--ok);background:var(--ok-bg)}
+.b-gold{color:var(--gold);background:var(--gold-soft)}
+.b-neutral{color:var(--soft);background:var(--raised)}
+.card{background:var(--surface);border-radius:12px;border:1px solid var(--line)}
+.over{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px}
+.num{font-variant-numeric:tabular-nums}
+.row{display:grid;align-items:center;column-gap:16px;padding:9px 20px;border-top:1px solid var(--line)}
+.row:hover{background:var(--raised)}
+.day{padding:12px 20px 8px;border-top:1px solid var(--line);background:var(--bg)}
+.av{width:24px;height:24px;border-radius:999px;background:var(--raised);color:var(--soft);font-size:10.5px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.field{position:relative;display:flex;align-items:center}
+.field svg{position:absolute;left:12px;color:var(--muted);pointer-events:none}
+.input{height:38px;width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:0 12px 0 38px;font:inherit;font-size:13.5px}
+.input::placeholder{color:var(--muted)}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+</style>
+</helmet>
+<div class="app {{themeClass}}" style="display: flex; flex-wrap: wrap; min-height: 1100px">
+  <div style="flex: 1 1 232px; max-width: 260px; background: var(--surface); border-right: 1px solid var(--line)">
+    <dc-import name="Sidebar" active="journal" theme="{{theme}}" hint-size="100%,1100px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 40px; box-sizing: border-box">
+    <div style="max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px">
+
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px">
+        <div style="flex: 1 1 280px">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.015em">Journal des mouvements</h1>
+          <p style="margin: 4px 0 0; color: var(--muted); font-size: 13.5px">Tous les mouvements de téléphones et de matériel · 139 événements</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex: 1 1 380px; justify-content: flex-end">
+          <label class="field" style="flex: 1 1 260px; max-width: 380px">
+            <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Rechercher</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input class="input" type="search" placeholder="Article, étiquette, personne…">
+          </label>
+          <button class="btn" type="button">Exporter</button>
+        </div>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px">
+        <div role="tablist" aria-label="Périmètre" style="display: inline-flex; gap: 4px; padding: 4px; border-radius: 10px; background: var(--raised)">
+          <sc-for list="{{scopes}}" as="s" hint-placeholder-count="3">
+            <button class="{{s.cls}}" role="tab" type="button" onClick="{{s.pick}}">{{s.name}}</button>
+          </sc-for>
+        </div>
+        <div role="group" aria-label="Type de mouvement" style="display: flex; flex-wrap: wrap; gap: 8px">
+          <sc-for list="{{types}}" as="t" hint-placeholder-count="9">
+            <button class="{{t.cls}}" type="button" onClick="{{t.pick}}"><span class="dot" style="{{t.dot}}"></span>{{t.name}}</button>
+          </sc-for>
+        </div>
+      </div>
+
+      <section class="card" aria-label="Mouvements" style="overflow: hidden">
+        <div style="overflow-x: auto">
+          <div style="min-width: 760px">
+            <div class="row over" style="grid-template-columns: 64px minmax(0,1fr) 56px 150px 120px 112px; border-top: 0; padding-top: 14px; padding-bottom: 12px">
+              <span>Heure</span><span>Article</span><span style="text-align: right">Qté</span><span>Personne</span><span>Mission</span><span style="text-align: right">Type</span>
+            </div>
+            <sc-for list="{{days}}" as="d" hint-placeholder-count="3">
+              <div class="day over" style="color: var(--soft)">{{d.label}}</div>
+              <sc-for list="{{d.rows}}" as="r" hint-placeholder-count="6">
+                <div class="row" style="grid-template-columns: 64px minmax(0,1fr) 56px 150px 120px 112px">
+                  <span class="mono" style="color: var(--muted)">{{r.time}}</span>
+                  <div style="min-width: 0; display: flex; align-items: center; gap: 8px">
+                    <div style="min-width: 0">
+                      <div style="font-weight: 600">{{r.what}}</div>
+                      <sc-if value="{{r.hasSub}}" hint-placeholder-val="{{false}}"><div style="font-size: 12px; color: var(--muted)">{{r.sub}}</div></sc-if>
+                    </div>
+                    <sc-if value="{{r.note}}" hint-placeholder-val="{{false}}">
+                      <button type="button" aria-label="Voir le commentaire" title="Voir le commentaire" style="border: 0; background: transparent; color: var(--muted); cursor: pointer; padding: 4px; display: inline-flex"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4Z"/></svg></button>
+                    </sc-if>
+                  </div>
+                  <span class="num" style="text-align: right; font-weight: 600">{{r.qty}}</span>
+                  <span style="display: flex; align-items: center; gap: 8px; font-size: 13px"><span class="av">{{r.ini}}</span>{{r.who}}</span>
+                  <span style="font-size: 13px; color: var(--soft)">{{r.mission}}</span>
+                  <span style="text-align: right"><span class="{{r.cls}}">{{r.type}}</span></span>
+                </div>
+              </sc-for>
+            </sc-for>
+          </div>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12.5px">
+          <span style="flex: 1">Page 1 sur 7 · 139 événements</span>
+          <button class="btn btn-sm" type="button">Précédent</button>
+          <button class="btn btn-sm" type="button">Suivant</button>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Sombre","Clair"],"default":"Sombre"},"$preview":{"width":1440,"height":1100}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { scope: 'Tous', type: 'Tous' };
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'Sombre';
+    const color = { 'Entrée': 'ok', 'Retour': 'ok', 'Sortie': 'warn', 'Consommé': 'warn', 'Réservation': 'gold', 'Annulation': 'neutral', 'Transfert': 'neutral', 'Ajustement': 'neutral', 'Création': 'gold' };
+    const dotVar = { ok: 'var(--ok)', warn: 'var(--warn)', gold: 'var(--gold)', neutral: 'var(--muted)' };
+    const scopes = ['Tous', 'Téléphones', 'Matériel'].map((name) => ({
+      name, cls: this.state.scope === name ? 'tab on' : 'tab', pick: () => this.setState({ scope: name })
+    }));
+    const types = ['Tous'].concat(Object.keys(color)).map((name) => ({
+      name,
+      cls: this.state.type === name ? 'chip on' : 'chip',
+      dot: name === 'Tous' ? 'display: none' : 'background: ' + dotVar[color[name]],
+      pick: () => this.setState({ type: name })
+    }));
+    const raw = [
+      ['20/10', '01:25', 'Lecteur de carte SD USB-C', null, 1, 'Compte-001', 'test lien', 'Sortie', false],
+      ['20/10', '01:22', 'SSD Samsung T9 2 To', 'STO-001 · S7UBNJ0Y204512M', 1, 'Compte-001', 'TEST', 'Sortie', true],
+      ['20/10', '01:21', 'T9', 'Commun · QWERTY', 1, 'Compte-001', 'TEST', 'Ajustement', true],
+      ['20/10', '01:15', 'T9', 'Commun · QWERTY', 1, 'Admin', 'TEST', 'Sortie', true],
+      ['20/10', '01:14', 'T9', 'Commun · QWERTY', 1, 'Admin', 'test2', 'Retour', false],
+      ['20/10', '01:14', 'T9', 'Étiquette 3 · AZERTY', 1, 'Admin', 'test2', 'Retour', false],
+      ['20/10', '00:35', 'Carte microSD 256 Go', null, 1, 'Compte-001', '—', 'Sortie', false],
+      ['19/10', '23:15', 'Clé USB 64 Go × 5', 'Séries TEST-001 à TEST-005', 5, 'Admin', '—', 'Création', false],
+      ['19/10', '22:59', 'SSD Samsung T7 1 To', 'STO-003 · S5YANS0R512901T', 1, 'Admin', '—', 'Sortie', false],
+      ['30/09', '22:19', 'T9', 'Commun · QWERTY', 1, 'Admin', 'test2', 'Ajustement', true],
+      ['30/09', '22:19', 'T9', 'Étiquette 3 · AZERTY', 1, 'Admin', 'test2', 'Ajustement', true],
+      ['30/09', '20:09', 'Carte microSD 256 Go', null, 1, 'Admin', 'test', 'Retour', false],
+      ['30/09', '20:09', 'Adaptateur USB-C vers Ethernet', null, 1, 'Admin', 'test', 'Retour', false],
+      ['30/09', '20:09', 'Adaptateur USB-C vers HDMI', null, 2, 'Admin', 'test', 'Retour', false],
+      ['30/09', '20:09', 'Adaptateur USB-C vers Ethernet', null, 1, 'Admin', 'test', 'Ajustement', true],
+      ['30/09', '20:09', 'Adaptateur USB-C vers HDMI', null, 2, 'Admin', 'test', 'Sortie', false],
+      ['30/09', '19:03', 'Essai concurrence', null, 2, 'EssaiTemporaire', '—', 'Retour', false]
+    ];
+    const labels = { '20/10': "Aujourd'hui · mardi 20 octobre", '19/10': 'Hier · lundi 19 octobre', '30/09': 'Mercredi 30 septembre' };
+    const rows = raw
+      .filter((r) => this.state.type === 'Tous' || r[7] === this.state.type)
+      .map(([day, time, what, sub, qty, who, mission, type, note]) => ({
+        day, time, what, sub, hasSub: !!sub, qty: qty + ' u.', who, mission, type, note,
+        ini: who.slice(0, 2).toUpperCase(),
+        cls: 'badge b-' + color[type]
+      }));
+    const days = Object.keys(labels)
+      .map((k) => ({ label: labels[k], rows: rows.filter((r) => r.day === k) }))
+      .filter((d) => d.rows.length);
+    return { theme, themeClass: theme === 'Clair' ? 't-light' : 't-dark', scopes, types, days };
+  }
+}
+</script>
+</body>
+</html>

@@ -8,45 +8,39 @@
 <meta http-equiv="refresh" content="30">
 <title>{{ mission.name }} — Heimdall</title>
 <link rel="icon" href="{% static 'stock/heimdall.ico' %}">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'stock/fonts/polices.css' %}">
+<link rel="stylesheet" href="{% static 'stock/charte.css' %}">
 <style>
-:root{ --fond:#111318; --carte:#15181d; --bord:#23262d; --texte:#e7e9ee;
-       --doux:#9aa2af; --gris:#6d7480; --bleu:#6f9dff; --vert:#5fc79a;
-       --ambre:#f0b45a }
-html[data-theme="light"]{ --fond:#f3f5f8; --carte:#ffffff; --bord:#dde1e8; --texte:#1a1d23;
-       --doux:#5a6272; --gris:#6d7480; --bleu:#1f5fd9; --vert:#1c8a59; --ambre:#b06a00 }
-html[data-theme="light"] .PREVUE{ background:#e9ecf1 }
-html[data-theme="light"] .ENCOURS, html[data-theme="light"] .pastille{ color:#1f5fd9 }
-html[data-theme="light"] .ANNULEE{ color:#c8372d }
-html[data-theme="light"] th, html[data-theme="light"] td{ border-color:#e9ecf1 }
+/* Mêmes jetons et même typographie que l'application (charte.css). */
 *{ box-sizing:border-box }
-body{ margin:0; background:var(--fond); color:var(--texte);
-      font:400 13px/1.5 Archivo,system-ui,sans-serif; padding:24px }
-main{ max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:18px }
-a{ color:var(--bleu); text-decoration:none }
+body{ margin:0; background:var(--bg); color:var(--ink); padding:28px 24px 40px;
+      font:400 14px/1.45 Inter,system-ui,sans-serif; -webkit-font-smoothing:antialiased }
+main{ max-width:1100px; margin:0 auto; display:flex; flex-direction:column; gap:20px }
+a{ color:var(--gold); text-decoration:none } a:hover{ color:var(--ink) }
 header{ display:flex; align-items:flex-start; gap:14px; flex-wrap:wrap }
-h1{ margin:0; font:700 24px/1.2 Archivo,sans-serif; letter-spacing:-.01em }
-h2{ margin:0 0 10px; font:600 10px/1 Archivo,sans-serif; color:var(--gris); letter-spacing:.16em; text-transform:uppercase }
-.sous{ color:var(--gris); font-size:12px; margin-top:4px }
-.badge{ font:600 11px/1 Archivo,sans-serif; letter-spacing:.1em; padding:6px 10px; border-radius:6px }
-.PREVUE{ background:#1f232a; color:var(--doux) }
-.ENCOURS{ background:rgba(42,107,242,.14); color:#8fb4ff }
-.TERMINEE{ background:rgba(95,199,154,.13); color:var(--vert) }
-.ANNULEE{ background:rgba(224,90,80,.14); color:#ef8b83 }
+h1{ margin:0; font-size:24px; font-weight:700; letter-spacing:-.015em; line-height:1.2 }
+h2{ margin:0 0 10px; font-size:11px; font-weight:600; color:var(--muted); letter-spacing:.12em; text-transform:uppercase }
+.sous{ color:var(--muted); font-size:13.5px; margin-top:4px }
+.badge{ display:inline-flex; align-items:center; height:22px; padding:0 8px; border-radius:6px;
+        font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase }
+.PREVUE{ background:var(--info-bg); color:var(--info) }
+.ENCOURS{ background:var(--ok-bg); color:var(--ok) }
+.TERMINEE{ background:var(--raised); color:var(--soft) }
+.ANNULEE{ background:var(--danger-bg); color:var(--danger) }
 .chiffres{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px }
-.carte{ background:var(--carte); border:1px solid var(--bord); border-radius:11px; padding:16px }
-.chiffre b{ display:block; font:700 30px/1 Archivo,sans-serif }
-.chiffre span{ font:500 10px/1 Archivo,sans-serif; color:var(--gris); letter-spacing:.14em; text-transform:uppercase; display:block; margin-top:8px }
+.carte{ background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px 18px }
+.chiffre b{ display:block; font-size:28px; font-weight:700; line-height:1.1; font-variant-numeric:tabular-nums }
+.chiffre span{ font-size:11px; font-weight:600; color:var(--muted); letter-spacing:.12em; text-transform:uppercase; display:block; margin-top:6px }
 .equipes{ display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:12px }
 .membres{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px }
-.pastille{ background:rgba(42,107,242,.13); border:1px solid rgba(42,107,242,.32); color:#8fb4ff; border-radius:999px; padding:3px 10px; font-size:12px }
+.pastille{ background:var(--raised); color:var(--soft); border-radius:999px; padding:3px 10px; font-size:12.5px }
 table{ width:100%; border-collapse:collapse }
-td,th{ text-align:left; padding:7px 6px; border-top:1px solid var(--bord); vertical-align:top }
-th{ border-top:0; font:600 9.5px/1 Archivo,sans-serif; color:var(--gris); letter-spacing:.14em; text-transform:uppercase }
-td.q{ width:48px; font-weight:600 }
-.rendu{ color:var(--vert) } .dehors{ color:var(--ambre) }
-.vide{ color:var(--gris); font-size:12px }
-footer{ color:var(--gris); font-size:11px; text-align:center }
+td,th{ text-align:left; padding:8px 6px; border-top:1px solid var(--line); vertical-align:top }
+th{ border-top:0; font-size:11px; font-weight:600; color:var(--muted); letter-spacing:.12em; text-transform:uppercase }
+td.q{ width:52px; font-weight:600; font-variant-numeric:tabular-nums }
+.rendu{ color:var(--ok) } .dehors{ color:var(--warn) }
+.vide{ color:var(--muted); font-size:13px }
+footer{ color:var(--muted); font-size:12px; text-align:center }
 </style>
 </head>
 <body>

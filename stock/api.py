@@ -173,7 +173,7 @@ def _auteur_effectif(request, params):
 
 TAILLES_PAGE = {"stockPhonePageSize", "stockMaterialPageSize"}
 TAILLES_ADMIN = {"adminPhoneSize", "adminMaterialSize", "adminConsoSize"}
-TEXTES = {"brand", "cabinet", "matCat", "logFilter"}
+TEXTES = {"brand", "cabinet", "matCat", "logFilter", "logScope"}
 BOOLEENS = {"showArchived"}
 THEMES = ("sombre", "clair", "auto")
 # Les cartes du profil. La liste est aussi dans l'interface (`WIDGETS`) : un
@@ -207,7 +207,7 @@ def _disposition_valide(valeur):
 # refusée ici.
 COLONNES_FILTRABLES = {
     "materiel": {"article", "cat", "affectation", "qte", "mission", "reservation"},
-    "stock": {"reference", "emplacement", "qte", "casier"},
+    "stock": {"reference", "emplacement", "qte"},
     "journal": {"date", "article", "qte", "personne", "mission", "type"},
 }
 

@@ -453,12 +453,37 @@ L'interface est **un seul fichier**, `templates/stock/index.html` : HTML, CSS et
 JavaScript sans framework ni étape de build. Elle dialogue avec le serveur par
 `fetch()` (voir [API](#api-et-adresses)).
 
-- Les **couleurs** sont des variables CSS (`--c-…`), avec une valeur sombre par
-  défaut et une valeur claire sous `html[data-theme="light"]`.
+- Les **couleurs** sont des jetons CSS (`--bg`, `--surface`, `--ink`, `--gold`…) définis
+  dans `static/stock/charte.css`, avec une valeur sombre par défaut et une valeur claire
+  sous `html[data-theme="light"]`. La charte est partagée avec les pages de connexion et
+  le tableau d'une mission. Les anciens noms `--c-…` subsistent dans `index.html` comme
+  alias vers ces jetons.
 - Les **appels sont relatifs** (`api/state`) : c'est ce qui permet à l'application
   de vivre sous le préfixe `/u/<compte>/` de chaque onglet.
 - Le rendu est entièrement recalculé à chaque changement d'état ; les champs de
   saisie portent un `data-k` qui permet de leur rendre le curseur après redessin.
+
+#### Charte graphique
+
+- **Une seule couleur d'accent : le doré** (`--gold`) — bouton principal, élément actif,
+  focus au clavier. Quatre couleurs d'état qui ne se mélangent pas : `--ok` (entrée,
+  retour, accepté, en cours), `--warn` (à traiter : non placé, stock bas, sortie,
+  réservé), `--danger` (suppression, erreur), `--info` (prévu, information). Les
+  emplacements (`A1·E1·C1`) sont neutres, en police mono.
+- **Polices** Inter et JetBrains Mono, hébergées dans `static/stock/fonts/` (pas d'appel
+  à un service externe). Texte courant 14 px, rien en dessous de 12 px sauf les sur-titres
+  en capitales (11 px) ; chiffres en `tabular-nums`.
+- **Composants** (bloc `<style>` de `index.html`) : `.btn` (+ `.btn-primary`, `.btn-sm`,
+  `.btn-ghost`, `.btn-icon`, `.btn-danger`), `.badge` (`.b-ok`, `.b-warn`…), `.chip`,
+  `.tab` / `.tabs` / `.seg`, `.card`, `.row` (les actions de ligne n'apparaissent qu'au
+  survol ou au clavier, toujours visibles sur écran tactile), `.champ-recherche`. Les
+  anciennes classes (`.btn-pri`, `.btn-sec`, `.btn-mini`, `.badge.ok`…) ont le même rendu.
+- **Aides JavaScript** : `champRecherche()`, `menuPlus()` (menu « ⋯ » d'une ligne),
+  `thFiltrable()` (titre de colonne filtrable), `avatar()`.
+- **Mise en page** : contenu limité à 1360 px ; en dessous de 900 px la barre latérale
+  devient un tiroir et les tableaux défilent horizontalement.
+- **États** : barre de chargement dorée pendant un enregistrement, indicateur au
+  démarrage, fenêtres `role="dialog"`, focus visible partout, mouvement réduit respecté.
 
 ### Migrations
 
@@ -498,7 +523,7 @@ stock/             le métier
     droits.py          rôles : qui a le droit de quoi, contrôle de chaque action
     roles.py           groupes, état, mot de passe et code de récupération d'un compte (admin)
     prets.py           demandes, acceptation, refus, prêts forcés
-  tests/             631 tests
+  tests/             632 tests
 templates/         index.html (l'interface), mission.html, pages de comptes
 static/            icône, logo
 docker/            point d'entrée du conteneur
@@ -640,7 +665,7 @@ de l'image, et ce qui fait attendre le service `web` que la base soit prête.
 python manage.py test stock        # nécessite une base PostgreSQL joignable (DATABASE_URL)
 ```
 
-**631 tests**, qui couvrent les règles métier domaine par domaine, le contrat HTTP de
+**632 tests**, qui couvrent les règles métier domaine par domaine, le contrat HTTP de
 l'API et le déploiement. Ils vérifient en particulier ce qui ne se voit pas à l'œil
 nu :
 

@@ -1,51 +1,49 @@
 {% load static %}<!doctype html>
-<html lang="fr">
+<html lang="fr" data-theme="auto">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<script>(function(){var h=document.documentElement;if(h.dataset.theme==="auto"){h.dataset.theme=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";}})();</script>
 <title>{% block titre %}Heimdall{% endblock %}</title>
 <link rel="icon" href="{% static 'stock/heimdall.ico' %}">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'stock/fonts/polices.css' %}">
+<link rel="stylesheet" href="{% static 'stock/charte.css' %}">
 <style>
-/* Mêmes couleurs et même typographie que l'application : arriver sur l'écran
-   de connexion ne doit pas donner l'impression de changer de logiciel. */
-:root{ --fond:#111318; --carte:#15181d; --bord:#23262d; --champ:#191c22;
-       --texte:#f2f4f8; --doux:#9aa2af; --gris:#6d7480; --bleu:#2A6BF2;
-       --rouge:#ef8b83; }
+/* Mêmes jetons, même typographie que l'application (charte.css) : arriver sur l'écran de
+   connexion ne doit pas donner l'impression de changer de logiciel. */
 *{ box-sizing:border-box }
-body{ margin:0; min-height:100vh; display:grid; place-items:center;
-      background:var(--fond); color:var(--texte);
-      font:400 13px/1.5 Archivo,system-ui,sans-serif; padding:24px }
-.carte{ width:100%; max-width:380px; background:var(--carte);
-        border:1px solid var(--bord); border-radius:14px; padding:26px 24px;
-        box-shadow:0 18px 50px rgba(0,0,0,.45) }
-.marque{ display:flex; align-items:center; gap:11px; margin-bottom:22px }
+body{ margin:0; min-height:100vh; display:grid; place-items:center; padding:24px;
+      background:var(--bg); color:var(--ink);
+      font:400 14px/1.45 Inter,system-ui,sans-serif; -webkit-font-smoothing:antialiased }
+a{ color:var(--gold); text-decoration:none } a:hover{ color:var(--ink) }
+.carte{ width:100%; max-width:400px; background:var(--surface);
+        border:1px solid var(--line); border-radius:12px; padding:28px 26px }
+.marque{ display:flex; align-items:center; gap:12px; margin-bottom:24px }
 .marque img{ width:34px; height:42px; object-fit:contain }
-.marque b{ display:block; font:600 16px/1.1 Archivo,sans-serif;
-           letter-spacing:-.01em }
-.marque span{ display:block; font:500 10px/1.1 Archivo,sans-serif;
-              color:var(--gris); letter-spacing:.14em; margin-top:4px }
-h1{ margin:0 0 4px; font:600 15px/1.3 Archivo,sans-serif }
-.sous{ margin:0 0 20px; font:400 12px/1.45 Archivo,sans-serif; color:var(--gris) }
-label{ display:block; font:500 10px/1 Archivo,sans-serif; letter-spacing:.1em;
-       text-transform:uppercase; color:var(--gris); margin-bottom:6px }
-input[type=text],input[type=password]{ width:100%; padding:10px 12px;
-  background:var(--champ); border:1px solid #343a45; border-radius:8px;
-  color:var(--texte); font:400 13px Archivo,sans-serif }
-input:focus{ outline:none; border-color:var(--bleu) }
-.champ{ margin-bottom:15px }
-button{ width:100%; padding:11px 14px; background:var(--bleu); border:0;
-        border-radius:8px; color:#fff; font:600 13px Archivo,sans-serif;
-        cursor:pointer }
+.marque b{ display:block; font-size:16px; font-weight:700; letter-spacing:-.01em }
+.marque span{ display:block; font-size:10.5px; font-weight:500; color:var(--muted);
+              letter-spacing:.16em; margin-top:3px }
+h1{ margin:0 0 4px; font-size:20px; font-weight:700; letter-spacing:-.015em }
+.sous{ margin:0 0 20px; font-size:13.5px; color:var(--muted) }
+label{ display:block; font-size:12.5px; font-weight:600; color:var(--soft); margin-bottom:6px }
+input[type=text],input[type=password]{ width:100%; height:40px; padding:0 12px;
+  background:var(--bg); border:1px solid var(--line); border-radius:8px;
+  color:var(--ink); font:400 14px Inter,system-ui,sans-serif }
+input::placeholder{ color:var(--muted) }
+input:focus{ outline:none; border-color:var(--gold); box-shadow:0 0 0 3px var(--gold-soft) }
+.champ{ margin-bottom:16px }
+button{ width:100%; height:40px; padding:0 14px; background:var(--gold);
+        border:1px solid var(--gold); border-radius:8px; color:var(--gold-ink);
+        font:600 14px Inter,system-ui,sans-serif; cursor:pointer }
 button:hover{ filter:brightness(1.08) }
-.erreurs{ margin:0 0 16px; padding:10px 12px; border-radius:8px;
-  background:rgba(239,139,131,.12); border:1px solid rgba(239,139,131,.4);
-  color:var(--rouge); font:400 12px/1.45 Archivo,sans-serif; list-style:none }
+.erreurs{ margin:0 0 16px; padding:11px 14px; border-radius:8px;
+  background:var(--danger-bg); color:var(--danger);
+  font-size:13px; line-height:1.45; list-style:none }
 .erreurs li + li{ margin-top:5px }
-.info{ margin:0 0 16px; padding:10px 12px; border-radius:8px;
-  background:rgba(42,107,242,.1); border:1px solid rgba(42,107,242,.4);
-  color:#b9cdff; font:400 12px/1.45 Archivo,sans-serif }
-.aide{ margin:8px 0 0; font:400 11px/1.5 Archivo,sans-serif; color:var(--gris) }
+.info{ margin:0 0 16px; padding:11px 14px; border-radius:8px;
+  background:var(--info-bg); color:var(--info); font-size:13px; line-height:1.45 }
+.aide{ margin:10px 0 0; font-size:12.5px; line-height:1.5; color:var(--muted) }
 .aide ul{ margin:6px 0 0; padding-left:18px }
 </style>
 </head>

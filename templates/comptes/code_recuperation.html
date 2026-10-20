@@ -5,7 +5,7 @@
 
 {% if code %}
 <p class="sous">Voici votre nouveau code. <b>Il ne sera plus jamais affiché</b> : notez-le maintenant, et gardez-le en lieu sûr.</p>
-<p style="margin:0 0 16px;padding:16px;text-align:center;border-radius:10px;border:1px dashed var(--bleu);background:rgba(42,107,242,.08);font:600 17px ui-monospace,Consolas,monospace;letter-spacing:.08em;user-select:all">{{ code }}</p>
+<p style="margin:0 0 16px;padding:16px;text-align:center;border-radius:10px;border:1px dashed var(--gold);background:var(--gold-soft);font:600 17px 'JetBrains Mono',ui-monospace,Consolas,monospace;letter-spacing:.08em;user-select:all">{{ code }}</p>
 <div class="aide">
   <ul>
     <li>Il sert à choisir un nouveau mot de passe depuis la page de connexion (« Mot de passe oublié ? »).</li>
@@ -13,7 +13,7 @@
     <li>Si vous le perdez, générez-en un nouveau : l'ancien cesse de fonctionner.</li>
   </ul>
 </div>
-<p class="aide"><a href="{% url 'accueil' %}" style="color:var(--bleu)">← Retour à l'application</a></p>
+<p class="aide"><a href="{% url 'accueil' %}" style="color:var(--gold)">← Retour à l'application</a></p>
 {% else %}
 <p class="sous">
   {% if defini %}Un code de récupération est défini pour votre compte.
@@ -35,6 +35,6 @@
   <button type="submit" name="action" value="supprimer" style="margin-top:8px;background:transparent;border:1px solid #343a45;color:var(--doux)">Supprimer le code</button>
   {% endif %}
 </form>
-<p class="aide"><a href="{% url 'accueil' %}" style="color:var(--bleu)">← Retour à l'application</a></p>
+<p class="aide"><a href="{% url 'accueil' %}" style="color:var(--gold)">← Retour à l'application</a></p>
 {% endif %}
 {% endblock %}

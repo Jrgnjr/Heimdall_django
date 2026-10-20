@@ -200,3 +200,8 @@ class FiltresParColonne(ReglagesDuCompte):
     def test_la_forme_est_controlee(self):
         for mauvais in ("texte", ["materiel"], {"materiel": "cat"}, None):
             self.assertEqual(self.poser(self.ouvrir("Alice"), colFiltres=mauvais).status_code, 422, mauvais)
+
+    def test_le_perimetre_du_journal_est_un_reglage(self):
+        self.assertEqual(self.poser(self.ouvrir("Alice"), logScope="Matériel").status_code, 200)
+        self.assertEqual(self.lus(self.ouvrir("Alice"))["logScope"], "Matériel")
+        self.assertEqual(self.poser(self.ouvrir("Alice"), logScope="x" * 81).status_code, 422)

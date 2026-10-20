@@ -1,0 +1,31 @@
+/* Heimdall — jetons de la refonte. Appliquer .t-dark ou .t-light sur <html> ou <body>. */
+.t-dark {
+  --bg: #0c0e12;          /* fond de page */
+  --surface: #12161c;     /* cartes, barre latérale */
+  --raised: #1a1f28;      /* survol, élément actif, badges neutres */
+  --line: #232a36;        /* bordures 1px */
+  --ink: #f2f4f8;         /* titres, texte actif */
+  --soft: #c4c9d1;        /* texte courant */
+  --muted: #8d94a0;       /* texte secondaire, en-têtes de colonnes */
+  --gold: #c29a62;        /* SEUL accent : bouton principal, actif, focus */
+  --gold-ink: #0c0e12;    /* texte sur fond doré */
+  --gold-soft: rgba(194,154,98,.14);
+  --ok: #5cc595;     --ok-bg: rgba(92,197,149,.12);     /* entrée, retour, accepté */
+  --warn: #e8ac45;   --warn-bg: rgba(232,172,69,.13);   /* à traiter : non placé, stock bas, sortie, réservé */
+  --danger: #f07575; --danger-bg: rgba(240,117,117,.12);/* suppression, erreur */
+  --info: #9db3d4;   --info-bg: rgba(157,179,212,.12);  /* prévu, groupe, information */
+}
+.t-light {
+  --bg: #f5f6f8; --surface: #ffffff; --raised: #eef1f5; --line: #e1e5eb;
+  --ink: #1a1f28; --soft: #3e4653; --muted: #646b78;
+  --gold: #8a6638; --gold-ink: #ffffff; --gold-soft: rgba(138,102,56,.10);
+  --ok: #1c7d52;     --ok-bg: rgba(28,125,82,.10);
+  --warn: #985b06;   --warn-bg: rgba(152,91,6,.10);
+  --danger: #b83232; --danger-bg: rgba(184,50,50,.09);
+  --info: #44608a;   --info-bg: rgba(68,96,138,.10);
+}
+/* Typo : Inter (texte), JetBrains Mono (emplacements, étiquettes, séries, heures).
+   Tailles : h1 24/700 · h2 15/700 · texte 14 · secondaire 12–13 · sur-titres 11/600 capitales espacées .12em.
+   Chiffres : font-variant-numeric: tabular-nums partout où il y a des quantités ou des dates.
+   Rayons : 6 (badges) · 8 (boutons, champs) · 10–12 (cartes) · 999 (pastilles de filtre).
+   Espacements : 4 · 8 · 12 · 16 · 20 · 32. Contenu principal : max-width 1360px. */

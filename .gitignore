@@ -26,3 +26,5 @@ staticfiles/
 .env.*
 !.env.exemple
 *.log
+
+*.zip

@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Heimdall — Plan de l'armoire</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@500&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.app{font-family:Inter,system-ui,sans-serif;font-size:14px;line-height:1.45;background:var(--bg);color:var(--ink)}
+.t-dark{--bg:#0c0e12;--surface:#12161c;--raised:#1a1f28;--line:#232a36;--ink:#f2f4f8;--soft:#c4c9d1;--muted:#8d94a0;--gold:#c29a62;--gold-ink:#0c0e12;--gold-soft:rgba(194,154,98,.14);--ok:#5cc595;--ok-bg:rgba(92,197,149,.12);--warn:#e8ac45;--warn-bg:rgba(232,172,69,.13);--danger:#f07575;--danger-bg:rgba(240,117,117,.12);--info:#9db3d4;--info-bg:rgba(157,179,212,.12)}
+.t-light{--bg:#f5f6f8;--surface:#ffffff;--raised:#eef1f5;--line:#e1e5eb;--ink:#1a1f28;--soft:#3e4653;--muted:#646b78;--gold:#8a6638;--gold-ink:#ffffff;--gold-soft:rgba(138,102,56,.10);--ok:#1c7d52;--ok-bg:rgba(28,125,82,.10);--warn:#985b06;--warn-bg:rgba(152,91,6,.10);--danger:#b83232;--danger-bg:rgba(184,50,50,.09);--info:#44608a;--info-bg:rgba(68,96,138,.10)}
+a{color:var(--gold)}a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--soft);font:inherit;font-size:13px;font-weight:500;cursor:pointer;text-decoration:none;white-space:nowrap;box-sizing:border-box}
+.btn:hover{background:var(--raised);color:var(--ink)}
+.btn-primary{background:var(--gold);border-color:var(--gold);color:var(--gold-ink);font-weight:600}
+.btn-primary:hover{background:var(--gold);color:var(--gold-ink);filter:brightness(1.08)}
+.btn-sm{height:30px;padding:0 10px;font-size:12.5px}
+.btn-ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn-icon{width:30px;height:30px;padding:0}
+.chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--soft);font:inherit;font-size:13px;cursor:pointer;white-space:nowrap}
+.chip:hover{color:var(--ink);background:var(--raised)}
+.chip.on{background:var(--gold-soft);border-color:var(--gold);color:var(--ink);font-weight:600}
+.badge{display:inline-flex;align-items:center;gap:6px;height:22px;padding:0 8px;border-radius:6px;font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;box-sizing:border-box}
+.b-loc{font-family:'JetBrains Mono',ui-monospace,monospace;text-transform:none;letter-spacing:0;font-weight:500;font-size:12px;color:var(--soft);background:var(--raised)}
+.b-warn{color:var(--warn);background:var(--warn-bg)}
+.b-ok{color:var(--ok);background:var(--ok-bg)}
+.card{background:var(--surface);border-radius:12px;border:1px solid var(--line)}
+.over{font-size:11px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+.mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px}
+.num{font-variant-numeric:tabular-nums}
+.cell{position:relative;display:flex;flex-direction:column;justify-content:space-between;gap:6px;min-height:92px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:var(--raised);color:var(--ink);font:inherit;text-align:left;cursor:pointer;box-sizing:border-box;transition:opacity .15s,border-color .15s}
+.cell:hover{border-color:var(--muted)}
+.cell.empty{background:transparent;border-style:dashed;color:var(--muted)}
+.cell.sel{border-color:var(--gold);box-shadow:0 0 0 1px var(--gold)}
+.cell.hit{border-color:var(--gold);background:var(--gold-soft)}
+.cell.dim{opacity:.32}
+.field{position:relative;display:flex;align-items:center}
+.field svg{position:absolute;left:12px;color:var(--muted);pointer-events:none}
+.input{height:38px;width:100%;box-sizing:border-box;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);padding:0 12px 0 38px;font:inherit;font-size:13.5px}
+.input::placeholder{color:var(--muted)}
+.step{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.step button{width:30px;height:30px;border:0;background:transparent;color:var(--soft);font:inherit;font-size:15px;cursor:pointer}
+.step button:hover{background:var(--raised);color:var(--ink)}
+.step span{min-width:28px;text-align:center;font-weight:600;font-variant-numeric:tabular-nums}
+:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+</style>
+</helmet>
+<div class="app {{themeClass}}" style="display: flex; flex-wrap: wrap; min-height: 960px">
+  <div style="flex: 1 1 232px; max-width: 260px; background: var(--surface); border-right: 1px solid var(--line)">
+    <dc-import name="Sidebar" active="plan" theme="{{theme}}" hint-size="100%,960px"></dc-import>
+  </div>
+
+  <main style="flex: 999 1 560px; min-width: 0; padding: 28px 32px 40px; box-sizing: border-box">
+    <div style="max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px">
+
+      <header style="display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px">
+        <div style="flex: 1 1 280px">
+          <h1 style="margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.015em">Plan de l'armoire</h1>
+          <p style="margin: 4px 0 0; color: var(--muted); font-size: 13.5px">Armoire A1 · 4 étagères × 5 casiers · 15 casiers occupés sur 20</p>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex: 1 1 420px; justify-content: flex-end">
+          <label class="field" style="flex: 1 1 260px; max-width: 380px">
+            <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0)">Trouver dans l'armoire</span>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input class="input" type="search" placeholder="Trouver un modèle, une marque, une réf.…" value="{{query}}" onChange="{{onQuery}}">
+          </label>
+          <button class="btn btn-primary" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Réception</button>
+        </div>
+      </header>
+
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px">
+        <span class="over" style="margin-right: 4px">Armoire</span>
+        <button class="chip on" type="button">A1 <span style="color: var(--muted); font-weight: 500">4 × 5</span></button>
+        <button class="chip" type="button" style="border-style: dashed; color: var(--muted)">+ Ajouter une armoire</button>
+        <span style="flex: 1"></span>
+        <button class="btn btn-sm" type="button" onClick="{{toggleEdit}}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/></svg>Dimensions</button>
+      </div>
+
+      <sc-if value="{{editing}}" hint-placeholder-val="{{false}}">
+        <section class="card" aria-label="Dimensions de l'armoire" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 24px; padding: 14px 18px">
+          <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--soft)">Étagères <span class="step"><button type="button" aria-label="Retirer une étagère">−</button><span>4</span><button type="button" aria-label="Ajouter une étagère">+</button></span></label>
+          <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--soft)">Casiers par étagère <span class="step"><button type="button" aria-label="Retirer un casier">−</button><span>5</span><button type="button" aria-label="Ajouter un casier">+</button></span></label>
+          <span style="flex: 1; font-size: 12.5px; color: var(--muted)">20 casiers au total</span>
+          <button class="btn btn-sm btn-ghost" type="button" style="color: var(--danger)">Supprimer l'armoire</button>
+        </section>
+      </sc-if>
+
+      <section aria-label="Alerte capacité" style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 18px; border-radius: 12px; background: var(--warn-bg)">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--warn); flex-shrink: 0"><path d="M12 4 2.5 20h19Z"/><path d="M12 10v4.5M12 17.5v.01"/></svg>
+        <div style="flex: 1 1 260px"><strong>25 modèles n'ont pas de casier</strong><span style="color: var(--soft)"> — 45 modèles pour 20 casiers. Agrandissez l'armoire A1 ou ajoutez-en une.</span></div>
+        <a class="btn btn-sm" href="Main.dc.html">Voir les non placés</a>
+      </section>
+
+      <div style="display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start">
+
+        <section class="card" aria-label="Armoire A1" style="flex: 999 1 640px; min-width: 0; padding: 18px 20px">
+          <div style="overflow-x: auto">
+            <div style="min-width: 640px; display: flex; flex-direction: column; gap: 10px">
+              <div style="display: grid; grid-template-columns: 36px repeat(5, minmax(0, 1fr)); gap: 10px">
+                <span></span>
+                <span class="over" style="text-align: center">C1</span><span class="over" style="text-align: center">C2</span><span class="over" style="text-align: center">C3</span><span class="over" style="text-align: center">C4</span><span class="over" style="text-align: center">C5</span>
+              </div>
+              <sc-for list="{{shelves}}" as="s" hint-placeholder-count="4">
+                <div style="display: grid; grid-template-columns: 36px repeat(5, minmax(0, 1fr)); gap: 10px; align-items: stretch">
+                  <span class="over" style="align-self: center">{{s.name}}</span>
+                  <sc-for list="{{s.cells}}" as="c" hint-placeholder-count="5">
+                    <button class="{{c.cls}}" type="button" onClick="{{c.pick}}" aria-label="{{c.aria}}">
+                      <span style="display: flex; align-items: center; gap: 6px">
+                        <span class="mono" style="font-size: 11px; color: var(--muted)">{{c.id}}</span>
+                        <sc-if value="{{c.low}}" hint-placeholder-val="{{false}}"><span title="Stock bas" style="width: 7px; height: 7px; border-radius: 999px; background: var(--warn); margin-left: auto"></span></sc-if>
+                      </span>
+                      <sc-if value="{{c.full}}" hint-placeholder-val="{{true}}">
+                        <span style="display: block">
+                          <span style="display: block; font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.model}}</span>
+                          <span class="num" style="display: block; font-size: 12px; color: var(--muted)">{{c.qty}} u.</span>
+                        </span>
+                      </sc-if>
+                      <sc-if value="{{c.empty}}" hint-placeholder-val="{{false}}">
+                        <span style="font-size: 12.5px">Libre</span>
+                      </sc-if>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 8px 20px; margin-top: 16px; font-size: 12.5px; color: var(--muted)">
+            <span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: var(--raised); border: 1px solid var(--line)"></span>Occupé</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; border: 1px dashed var(--muted)"></span>Libre</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 8px; height: 8px; border-radius: 999px; background: var(--warn)"></span>Stock bas (5 u. ou moins)</span>
+            <span style="display: inline-flex; align-items: center; gap: 8px"><span style="width: 14px; height: 14px; border-radius: 4px; background: var(--gold-soft); border: 1px solid var(--gold)"></span>Résultat de recherche</span>
+          </div>
+        </section>
+
+        <aside class="card" aria-label="Détail du casier" style="flex: 1 1 300px; min-width: 0; padding: 20px">
+          <sc-if value="{{hasSel}}" hint-placeholder-val="{{true}}">
+            <div style="display: flex; flex-direction: column; gap: 16px">
+              <div style="display: flex; align-items: center; gap: 10px">
+                <span class="badge b-loc" style="height: 26px; font-size: 13px">{{sel.loc}}</span>
+                <span style="flex: 1"></span>
+                <button class="btn btn-icon btn-ghost" type="button" aria-label="Fermer le détail" onClick="{{clearSel}}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+              </div>
+              <sc-if value="{{sel.full}}" hint-placeholder-val="{{true}}">
+                <div style="display: flex; flex-direction: column; gap: 16px">
+                  <div>
+                    <div style="font-size: 18px; font-weight: 700">{{sel.model}}</div>
+                    <div style="font-size: 12.5px; color: var(--muted); margin-top: 2px">{{sel.brand}} · <span class="mono">{{sel.ref}}</span></div>
+                  </div>
+                  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+                    <div style="padding: 12px; border-radius: 10px; background: var(--raised)"><div class="over">En stock</div><div class="num" style="font-size: 24px; font-weight: 700; {{sel.qtyStyle}}">{{sel.qty}}</div></div>
+                    <div style="padding: 12px; border-radius: 10px; background: var(--raised)"><div class="over">Variantes</div><div class="num" style="font-size: 24px; font-weight: 700">1</div></div>
+                  </div>
+                  <sc-if value="{{sel.low}}" hint-placeholder-val="{{false}}"><div class="badge b-warn" style="align-self: flex-start">Stock bas</div></sc-if>
+                  <div style="display: flex; flex-wrap: wrap; gap: 8px">
+                    <a class="btn btn-sm" href="Main.dc.html">Voir la référence</a>
+                    <button class="btn btn-sm" type="button">Déplacer</button>
+                    <button class="btn btn-sm" type="button">Sortir</button>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{sel.empty}}" hint-placeholder-val="{{false}}">
+                <div style="display: flex; flex-direction: column; gap: 12px">
+                  <div style="font-size: 15px; font-weight: 600">Casier libre</div>
+                  <p style="margin: 0; font-size: 13px; color: var(--muted)">Affectez-y un des 25 modèles sans casier.</p>
+                  <button class="btn btn-sm btn-primary" type="button" style="align-self: flex-start">Affecter un modèle</button>
+                </div>
+              </sc-if>
+            </div>
+          </sc-if>
+          <sc-if value="{{noSel}}" hint-placeholder-val="{{false}}">
+            <div>
+              <div style="font-size: 15px; font-weight: 700">Sélectionnez un casier</div>
+              <p style="margin: 8px 0 0; font-size: 13px; color: var(--muted); line-height: 1.55">Cliquez un casier pour voir son contenu, ou cherchez un modèle : les casiers correspondants s'allument et le reste de l'armoire s'estompe.</p>
+            </div>
+          </sc-if>
+        </aside>
+
+      </div>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"theme":{"editor":"enum","options":["Sombre","Clair"],"default":"Sombre"},"$preview":{"width":1440,"height":960}}'>
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    this.state = { sel: 'E3·C1', query: '', editing: false };
+  }
+  renderVals() {
+    const theme = this.props.theme ?? 'Sombre';
+    const content = {
+      'E1·C1': ['iPhone 16 Pro Max', 'Apple', 'A3287', 6],
+      'E1·C2': ['iPhone 16 Pro', 'Apple', 'A3286', 10],
+      'E1·C3': ['iPhone 16', 'Apple', 'A3283', 14],
+      'E1·C4': ['iPhone 15 Pro', 'Apple', 'A3212', 8],
+      'E1·C5': ['iPhone 15', 'Apple', 'A3090', 18],
+      'E2·C1': ['iPhone 14', 'Apple', 'A2882', 12],
+      'E2·C2': ['iPhone SE (2022)', 'Apple', 'A2783', 20],
+      'E3·C1': ['Galaxy S24 Ultra', 'Samsung', 'SM-S928B', 5],
+      'E3·C2': ['Galaxy S24', 'Samsung', 'SM-S921B', 11],
+      'E3·C3': ['Galaxy S23', 'Samsung', 'SM-S911B', 9],
+      'E3·C4': ['Galaxy A55 5G', 'Samsung', 'SM-A556B', 24],
+      'E3·C5': ['Galaxy A35 5G', 'Samsung', 'SM-A356B', 30],
+      'E4·C1': ['Galaxy A15 5G', 'Samsung', 'SM-A156B', 42],
+      'E4·C2': ['Galaxy Tab S9 FE', 'Samsung', 'SM-X510', 7],
+      'E4·C3': ['Galaxy Z Fold5', 'Samsung', 'SM-F946B', 3]
+    };
+    const q = (this.state.query || '').trim().toLowerCase();
+    const shelves = ['E1', 'E2', 'E3', 'E4'].map((e) => ({
+      name: e,
+      cells: ['C1', 'C2', 'C3', 'C4', 'C5'].map((col) => {
+        const id = e + '·' + col;
+        const d = content[id];
+        const match = q && d && (d[0] + ' ' + d[1] + ' ' + d[2]).toLowerCase().includes(q);
+        let cls = d ? 'cell' : 'cell empty';
+        if (q) cls += match ? ' hit' : ' dim';
+        if (this.state.sel === id) cls += ' sel';
+        return {
+          id, cls, full: !!d, empty: !d,
+          model: d ? d[0] : '', qty: d ? d[3] : 0, low: !!d && d[3] <= 5,
+          aria: 'Casier ' + id + (d ? ', ' + d[0] + ', ' + d[3] + ' unités' : ', libre'),
+          pick: () => this.setState({ sel: id })
+        };
+      })
+    }));
+    const s = this.state.sel;
+    const d = s ? content[s] : null;
+    const sel = {
+      loc: 'A1·' + (s || ''), full: !!d, empty: !!s && !d,
+      model: d ? d[0] : '', brand: d ? d[1] : '', ref: d ? d[2] : '', qty: d ? d[3] : 0,
+      low: !!d && d[3] <= 5, qtyStyle: d && d[3] <= 5 ? 'color: var(--warn)' : ''
+    };
+    return {
+      theme, themeClass: theme === 'Clair' ? 't-light' : 't-dark',
+      shelves, sel, hasSel: !!s, noSel: !s,
+      clearSel: () => this.setState({ sel: null }),
+      query: this.state.query,
+      onQuery: (e) => this.setState({ query: e.target.value }),
+      editing: this.state.editing,
+      toggleEdit: () => this.setState({ editing: !this.state.editing })
+    };
+  }
+}
+</script>
+</body>
+</html>

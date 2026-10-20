@@ -30,6 +30,8 @@ from ..models import (DemandePret, Equipe, Material, MaterialReservation,
                       Mission)
 from . import action, journaux
 from .champs import ErreurAction, qte, texte
+from .droits import (acteur, dans_le_groupe, est_admin, gere, groupe_de,
+                     peut_repondre_pour)
 from .gestion import effectifs_de, exiger_gestion
 from .materiel import creer_emprunt, mission_demandee, mission_existante
 
@@ -124,10 +126,15 @@ def _demande(p, utilisateur, role):
     d = DemandePret.objects.filter(pk=pk).first()
     if d is None:
         raise ErreurAction("Cette demande n'existe plus. Rechargez la page.")
-    if getattr(d, role) != utilisateur:
-        raise ErreurAction("Cette demande ne vous est pas adressée."
-                           if role == "proprietaire"
-                           else "Cette demande n'est pas la vôtre.")
+    if role == "proprietaire":
+        # La personne sollicitée, son chef de groupe (si elle est absente), ou un
+        # administrateur.
+        if not peut_repondre_pour(d.proprietaire, utilisateur, p):
+            raise ErreurAction(
+                "Cette demande ne vous est pas adressée : seuls %s, son chef de "
+                "groupe et les administrateurs peuvent y répondre." % d.proprietaire)
+    elif acteur(p, utilisateur) != d.demandeur and not est_admin(p):
+        raise ErreurAction("Cette demande n'est pas la vôtre.")
     if d.statut != DemandePret.EN_ATTENTE:
         raise ErreurAction("Cette demande a déjà reçu une réponse (%s)." % d.statut.lower())
     return d
@@ -136,22 +143,30 @@ def _demande(p, utilisateur, role):
 @action("pret.accepter")
 def pret_accepter(utilisateur, p):
     d = _demande(p, utilisateur, "proprietaire")
-    ligne, materiel = _ligne_de_sac(utilisateur, d.material_id)
+    # Le sac est celui du **sollicité**, pas de celui qui répond : un chef de groupe
+    # peut accepter à la place d'un effectif absent.
+    proprietaire = d.proprietaire
+    ligne, materiel = _ligne_de_sac(proprietaire, d.material_id)
 
     libre = disponible_sac(ligne, materiel)
     if d.quantite > libre:
         raise ErreurAction(
-            "Il ne reste que %d × %s disponible(s) dans votre sac, pour %d "
-            "demandé(s). Refusez, ou attendez un retour." % (libre, materiel.nom_affiche, d.quantite))
+            "Il ne reste que %d × %s disponible(s) dans le sac de « %s », pour %d "
+            "demandé(s). Refusez, ou attendez un retour."
+            % (libre, materiel.nom_affiche, proprietaire, d.quantite))
 
     if d.mission != SANS_MISSION:
         mission = mission_existante(d.mission)
         if mission.archived:
             raise ErreurAction("La mission « %s » est archivée : refusez la demande." % d.mission)
 
-    creer_emprunt(materiel, d.quantite, d.mission, d.demandeur, sac_de=utilisateur)
+    creer_emprunt(materiel, d.quantite, d.mission, d.demandeur, sac_de=proprietaire)
+    repondant = acteur(p, utilisateur)
+    note = "Prêté par %s" % proprietaire
+    if repondant != proprietaire:
+        note += " (accepté par %s)" % repondant
     journaux.materiel("SORTIE", materiel.nom_affiche, d.quantite, d.demandeur, d.mission,
-                      "Prêté par %s" % utilisateur, materiel.identite)
+                      note, materiel.identite)
     d.statut = DemandePret.ACCEPTEE
     d.repondu_le = timezone.now()
     d.save(update_fields=["statut", "repondu_le"])
@@ -166,7 +181,7 @@ def pret_forcer(utilisateur, p):
     Pour une mission : le gestionnaire qui en a la charge peut avoir besoin du
     matériel d'une personne absente, ou sans accès à la plateforme — à qui l'on ne
     peut donc pas demander. Réservé aux gestionnaires de la mission et aux
-    administrateurs.
+    administrateurs, ainsi qu'à un chef de groupe pour les sacs de son groupe.
 
     Ce n'est pas un passe-droit discret : le prêt est marqué comme **forcé** et
     nomme celui qui l'a forcé, ce que le prêteur lit dans « Mes prêts », et le
@@ -178,9 +193,13 @@ def pret_forcer(utilisateur, p):
     """
     nom_mission = texte(p, "mission", maxi=200)
     mission = mission_existante(nom_mission)
-    exiger_gestion(mission.name, utilisateur, p)
-
     proprietaire = texte(p, "proprietaire", maxi=150)
+    # Le gestionnaire de la mission et les administrateurs ; et un chef de groupe,
+    # pour le sac d'un effectif de **son** groupe — c'est son monde.
+    if not gere(mission.name, utilisateur, p) and not dans_le_groupe(
+            acteur(p, utilisateur), proprietaire):
+        exiger_gestion(mission.name, utilisateur, p)
+
     cle = texte(p, "article", maxi=200)
     n = qte(p)
     pour = texte(p, "pour", obligatoire=False, maxi=150) or utilisateur
@@ -241,13 +260,13 @@ def pret_rendu(utilisateur, p):
     r = _ouverts().filter(pk=pk).select_related("material").first()
     if r is None:
         raise ErreurAction("Ce prêt n'existe plus ou est déjà rendu. Rechargez la page.")
-    if r.sac_de != utilisateur:
+    if not peut_repondre_pour(r.sac_de, utilisateur, p):
         raise ErreurAction("Ce prêt n'est pas le vôtre.")
     m = r.material
     quantite, mission = r.qty, r.mission
     r.delete()
     journaux.materiel("RETOUR", m.nom_affiche, quantite, utilisateur, mission,
-                      "Revenu dans le sac de %s" % utilisateur, m.identite)
+                      "Revenu dans le sac de %s" % r.sac_de, m.identite)
     return ("Retour de %d × %s dans votre sac" % (quantite, m.nom_affiche),
             [["materiel", m.name], ["matLog", ""]])
 
@@ -294,6 +313,22 @@ def etat_prets(compte):
             "id": d.pk, "de": d.demandeur, "article": d.material_id,
             "libelle": libelle, "detail": detail, "quantite": d.quantite,
             "mission": d.mission, "motif": d.motif, "iso": _iso(d.cree_le),
+            "disponible": disponible_sac(ligne, m) if (ligne and m) else 0})
+
+    # Un chef de groupe voit aussi les demandes qui attendent ses effectifs : il peut
+    # y répondre à leur place, s'ils sont absents.
+    recues_groupe = []
+    for d in DemandePret.objects.filter(proprietaire__in=groupe_de(compte),
+                                        statut=DemandePret.EN_ATTENTE):
+        libelle, detail = identite(d.material_id)
+        m = materiaux.get(d.material_id)
+        ligne = Dotation.objects.filter(compte_id=d.proprietaire,
+                                        material_id=d.material_id).first()
+        recues_groupe.append({
+            "id": d.pk, "de": d.demandeur, "pour": d.proprietaire,
+            "article": d.material_id, "libelle": libelle, "detail": detail,
+            "quantite": d.quantite, "mission": d.mission, "motif": d.motif,
+            "iso": _iso(d.cree_le),
             "disponible": disponible_sac(ligne, m) if (ligne and m) else 0})
 
     depuis = timezone.now() - HISTORIQUE
@@ -346,4 +381,4 @@ def etat_prets(compte):
                 "mission": d.mission, "motif": d.motif, "iso": _iso(d.cree_le)})
 
     return {"recues": recues, "emises": emises, "prets": prets, "sacs": sacs,
-            "missions": missions}
+            "missions": missions, "recuesGroupe": recues_groupe}

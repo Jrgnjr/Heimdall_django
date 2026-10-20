@@ -14,6 +14,7 @@ from django.urls import reverse
 
 from comptes.models import ActiviteCompte, Compte, Dotation
 from stock.models import Material
+from stock.tests.aide_groupes import faire_groupe
 from stock.services import ErreurAction, executer
 from stock.services.dotations import sacs
 
@@ -144,14 +145,19 @@ class SacDeDotation(TestCase):
         self.refus(compte="Compte-001", materiel=[["Inconnu", 1, ""]])
         self.assertEqual(Dotation.objects.count(), 1)
 
-    def test_reserve_aux_administrateurs(self):
+    def test_reserve_aux_administrateurs_et_au_chef_de_groupe(self):
+        """Composer un sac : un administrateur, ou le chef de groupe de son titulaire."""
         with self.assertRaises(ErreurAction) as capture:
             executer("compte.dotations", "Compte-001",
-                     {"compte": "Compte-001",
-                      "materiel": [["Câble USB-C", 1, ""]]}, False)
-        self.assertIn("réservée aux administrateurs", str(capture.exception))
-
-    # -- article supprimé du catalogue ------------------------------------
+                     {"compte": "Compte-001", "materiel": []}, False)
+        self.assertIn("réservé aux administrateurs et à son chef de groupe",
+                      str(capture.exception))
+        Compte.objects.create_user("Chef", password="x" * 10, doit_changer=False)
+        groupe = faire_groupe("GC", chef="Chef")
+        with self.assertRaises(ErreurAction):           # pas son effectif
+            executer("compte.dotations", "Chef", {"compte": "Compte-001", "materiel": []}, False)
+        Compte.objects.filter(pk="Compte-001").update(membre_de=groupe)
+        executer("compte.dotations", "Chef", {"compte": "Compte-001", "materiel": []}, False)
 
     def test_un_article_supprime_laisse_une_ligne_visible(self):
         """Elle est signalée pour être corrigée, plutôt que de s'évaporer avec

@@ -18,6 +18,7 @@ from comptes.models import ActiviteCompte, Compte, Dotation
 
 from ..models import Material
 from . import action
+from .droits import acteur, dans_le_groupe, est_admin
 from .champs import ErreurAction, qte, texte
 
 
@@ -78,6 +79,12 @@ def compte_dotations(utilisateur, p):
     compte = Compte.objects.filter(pk=identifiant).first()
     if compte is None:
         raise ErreurAction("Ce compte n'existe plus.")
+    # Un administrateur compose tous les sacs ; un chef de groupe, ceux de ses
+    # effectifs.
+    if not est_admin(p) and not dans_le_groupe(acteur(p, utilisateur), identifiant):
+        raise ErreurAction(
+            "Composer le sac de « %s » est réservé aux administrateurs et à son "
+            "chef de groupe." % identifiant)
 
     lignes = _lignes(p)
 
@@ -97,7 +104,7 @@ def compte_dotations(utilisateur, p):
     return ("Sac de « %s » mis à jour." % identifiant, [])
 
 
-def sacs(demandeur, administrateur):
+def sacs(demandeur, administrateur, visibles=()):
     """Les sacs tels que l'interface les lit : { compte: [lignes] }.
 
     Un non-administrateur ne voit que le sien. Ce n'est pas seulement de la
@@ -112,7 +119,8 @@ def sacs(demandeur, administrateur):
     """
     lignes = Dotation.objects.all()
     if not administrateur:
-        lignes = lignes.filter(compte_id=demandeur)
+        # Le sien, et celui des effectifs de son groupe s'il est chef.
+        lignes = lignes.filter(compte_id__in=[demandeur, *visibles])
 
     articles = {m.name: m for m in Material.objects.all()}
     resultat = {}

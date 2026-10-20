@@ -24,7 +24,8 @@ from django.utils import timezone
 from ..models import Material, MaterialReservation, Pack, PackItem
 from . import action, journaux
 from .champs import ErreurAction, qte, texte
-from .materiel import article, creer_emprunt, mission_demandee
+from .droits import exiger_rendre
+from .materiel import article, creer_emprunt, mission_pour_emprunt
 
 
 # --------------------------------------------------------------------------
@@ -229,7 +230,7 @@ def pack_emprunt(utilisateur, p):
     en la chargeant dans le camion.
     """
     pack = pack_existant(texte(p, "pack", maxi=200))
-    mission = mission_demandee(p)
+    mission = mission_pour_emprunt(p, utilisateur)
     commentaire = texte(p, "commentaire", obligatoire=False, maxi=500)
 
     deja = pack_deja_dehors(pack.name)
@@ -282,6 +283,8 @@ def pack_retour(utilisateur, p):
                     .order_by("material_id", "seq"))
     if not en_cours:
         raise ErreurAction("Aucun article à rendre pour le pack « %s »." % nom)
+    for r in en_cours:                 # tout rendre, ou rien : on vérifie avant d'écrire
+        exiger_rendre(r, utilisateur, p)
 
     quand = timezone.now()
     note = commentaire_de_pack(nom, "")

@@ -15,7 +15,7 @@ elle-même : **401** veut dire « pas connecté », **403** veut dire « mot de 
 
 import json
 
-from comptes.models import Compte
+from comptes.models import Compte, Groupe
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.utils import timezone
@@ -25,6 +25,8 @@ from django.views.decorators.http import require_GET, require_POST
 from . import etat
 from .models import MaterialLog, Mission, Operation, PhoneMovement, Version
 from .services import ACTIONS, ErreurAction, executer
+from .services.droits import (groupe_de, groupe_du_compte,
+                                  membres_du_groupe)
 from .services.gestion import gestion_par_mission
 from .services.prets import etat_prets
 from .services.statuts import figer_statuts
@@ -52,16 +54,51 @@ def _refus_session(request):
 def _comptes(request):
     """Les identifiants proposables comme auteur d'une action.
 
-    Seul un administrateur peut agir au nom d'un autre — pour enregistrer une
-    sortie que quelqu'un a faite sans se connecter. La liste ne lui est envoyée
-    que dans ce cas : elle n'aurait aucun usage ailleurs, et la donner
-    renseignerait sur la composition de l'équipe.
+    Un administrateur peut agir au nom de n'importe quel compte, un chef de groupe
+    au nom de ses effectifs — pour enregistrer une sortie que quelqu'un a faite
+    sans se connecter. La liste ne leur est envoyée que dans ce cas : elle n'aurait
+    aucun usage ailleurs, et la donner renseignerait sur la composition de
+    l'équipe.
     """
-    if not request.user.administrateur:
-        return []
-    from comptes.models import Compte
-    return list(Compte.objects.filter(actif=True)
-                .values_list("identifiant", flat=True))
+    if request.user.administrateur:
+        return list(Compte.objects.filter(actif=True)
+                    .values_list("identifiant", flat=True))
+    if request.user.chef_de_groupe:
+        return sorted(groupe_de(request.user.identifiant))
+    return []
+
+
+def _roles(request):
+    """Le rôle de l'appelant, son groupe, et — pour un administrateur — tous les autres.
+
+    Un effectif n'a besoin que du sien ; un chef de groupe y ajoute la liste de ses
+    effectifs ; un administrateur voit tous les rôles et tous les groupes, pour les
+    régler.
+    """
+    u = request.user
+    moi = {"role": u.role, "chef": u.chef_id or "",
+           "effectifs": sorted(groupe_de(u.identifiant)) if u.chef_de_groupe else []}
+    # Le groupe, tel que ses membres le voient : lui-même, son chef, ses pairs.
+    g = groupe_du_compte(u.identifiant)
+    membres = membres_du_groupe(u.identifiant)
+    moi["groupe"] = ({"id": g.pk, "nom": g.nom, "chef": g.chef_id or "",
+                      "membres": membres, "affectation": g.affectation}
+                     if g is not None else None)
+    tous, groupes = {}, []
+    if u.administrateur:
+        # Tous les comptes, désactivés compris : c'est l'écran qui décide de ce qu'il
+        # montre, et qui permet de réactiver.
+        tous = {c.identifiant: {"role": c.role, "chef": c.chef_id or "",
+                                "groupe": c.membre_de_id, "actif": c.actif,
+                                "visite": c.derniere_visite.isoformat()
+                                if c.derniere_visite else None}
+                for c in Compte.objects.select_related("membre_de")}
+        groupes = [{"id": x.pk, "nom": x.nom, "materiel": x.materiel,
+                    "chef": x.chef_id or "",
+                    "membres": sorted(Compte.objects.filter(membre_de=x)
+                                      .values_list("identifiant", flat=True))}
+                   for x in Groupe.objects.all()]
+    return moi, tous, groupes
 
 
 def _enveloppe(request, charge):
@@ -71,6 +108,7 @@ def _enveloppe(request, charge):
     # `comptes`. Le faire passer par `etat.charger()`, qui ignore l'utilisateur,
     # aurait montré les sacs de toute l'équipe à tout le monde.
     from .services.dotations import sacs
+    moi, roles, groupes = _roles(request)
     charge.update({
         "user": request.user.identifiant,
         "admin": bool(request.user.administrateur),
@@ -90,11 +128,16 @@ def _enveloppe(request, charge):
         # est à la portée de tous.
         "annuaire": list(Compte.objects.filter(actif=True)
                          .values_list("identifiant", flat=True)),
+        "moi": moi,
+        "comptesRoles": roles,
+        "groupes": groupes,
         "plancherMissions": {m.name: m.status_max for m in
                              Mission.objects.exclude(status_max__isnull=True)
                              .exclude(status_max="")},
         "dotations": sacs(request.user.identifiant,
-                          bool(request.user.administrateur)),
+                          bool(request.user.administrateur),
+                          set(groupe_de(request.user.identifiant))
+                          | set(membres_du_groupe(request.user.identifiant))),
     })
     return charge
 
@@ -112,10 +155,15 @@ def _auteur_effectif(request, params):
     demande = str(demande).strip()
     if demande == request.user.identifiant:
         return demande
-    if not request.user.administrateur:
+    # Un administrateur, pour n'importe quel compte ; un chef de groupe, pour l'un de
+    # ses effectifs. Les autres n'agissent qu'en leur nom.
+    if not request.user.administrateur and not request.user.chef_de_groupe:
         raise ErreurAction("Vous ne pouvez pas agir au nom d'un autre compte.")
     if demande not in _comptes(request):
-        raise ErreurAction("Le compte « %s » n'existe pas." % demande)
+        raise ErreurAction(
+            "Le compte « %s » n'existe pas%s." % (
+                demande, "" if request.user.administrateur
+                else " dans votre groupe : un chef de groupe n'agit qu'au nom de ses effectifs"))
     return demande
 
 
@@ -133,7 +181,7 @@ THEMES = ("sombre", "clair", "auto")
 WIDGETS_PROFIL = {
     "compteurs", "a_recommander", "sac", "sorties", "missions", "activite",
     "missions_jour", "retard", "stock_bas", "equipes", "etat_stock",
-    "acces_rapides", "prets", "demandes",
+    "acces_rapides", "prets", "demandes", "groupe",
 }
 
 
@@ -152,6 +200,30 @@ def _disposition_valide(valeur):
         vus.add(carte["id"])
     return True
 
+
+
+# Les filtres par colonne des tableaux, par tableau puis par colonne. La liste est aussi
+# dans l'interface (`FILTRES_VIDES`) : une colonne ajoutée d'un côté seulement serait
+# refusée ici.
+COLONNES_FILTRABLES = {
+    "materiel": {"article", "cat", "affectation", "qte", "mission", "reservation"},
+    "stock": {"reference", "emplacement", "qte", "casier"},
+    "journal": {"date", "article", "qte", "personne", "mission", "type"},
+}
+
+
+def _filtres_valides(valeur):
+    if not isinstance(valeur, dict):
+        return False
+    for tableau, colonnes in valeur.items():
+        if tableau not in COLONNES_FILTRABLES or not isinstance(colonnes, dict):
+            return False
+        for colonne, texte in colonnes.items():
+            if colonne not in COLONNES_FILTRABLES[tableau]:
+                return False
+            if not isinstance(texte, str) or len(texte) > 80:
+                return False
+    return True
 
 
 def _reglage_valide(cle, valeur):
@@ -173,6 +245,8 @@ def _reglage_valide(cle, valeur):
         return valeur in THEMES
     if cle == "profilWidgets":
         return _disposition_valide(valeur)
+    if cle == "colFiltres":
+        return _filtres_valides(valeur)
     return False
 
 
@@ -309,6 +383,7 @@ def action(request):
     params = corps.get("params") or {}
     if not isinstance(params, dict):
         return JsonResponse({"error": "Paramètres illisibles."}, status=400)
+    params.pop("_secret", None)  # clé interne : jamais fournie par un client
     if nom not in ACTIONS:
         return JsonResponse({"error": "Action inconnue : %s." % nom}, status=422)
 
@@ -326,7 +401,12 @@ def action(request):
             avant_ml = MaterialLog.objects.count()
 
             resume, cibles = executer(nom, auteur, params,
-                                      request.user.administrateur)
+                                      request.user.administrateur,
+                                      acteur=request.user.identifiant)
+            # Une action peut rendre un secret à celui qui l'a demandée (un mot de
+            # passe provisoire). Il est retiré **avant** l'écriture de l'historique : il
+            # ne doit exister qu'en réponse à cet appel.
+            secret = params.pop("_secret", None)
 
             nouvelle = depart + 1
             ligne_version.valeur = nouvelle
@@ -348,10 +428,11 @@ def action(request):
 
     _purger_operations()
     _, delta = etat.charger_delta(depart)
-    return JsonResponse(_enveloppe(request, {
-        "ok": True, "version": nouvelle, "resume": (resume or "")[:400],
-        "delta": delta,
-    }))
+    reponse = {"ok": True, "version": nouvelle, "resume": (resume or "")[:400],
+               "delta": delta}
+    if secret:
+        reponse["secret"] = secret
+    return JsonResponse(_enveloppe(request, reponse))
 
 
 def _purger_operations():

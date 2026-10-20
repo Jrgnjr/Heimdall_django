@@ -18,6 +18,8 @@ from django.utils import timezone
 
 from ..models import Material, MaterialLog, MaterialReservation, Mission
 from . import action, journaux
+from .droits import exiger_emprunt_pour, exiger_rendre
+from .gestion import exiger_gestion
 from .champs import (AFFECTATIONS, ErreurAction, affectation, ligne, qte,
                      texte)
 
@@ -126,6 +128,18 @@ def mission_existante(nom):
 def mission_demandee(p):
     nom = texte(p, "mission", obligatoire=False, defaut=SANS_MISSION)
     return None if nom == SANS_MISSION else mission_existante(nom)
+
+
+def mission_pour_emprunt(p, utilisateur):
+    """La mission pour laquelle on emprunte — que l'on a le droit de servir.
+
+    Sans mission, l'emprunt est libre. Pour une mission, il faut en faire partie
+    (équipier), la gérer, ou être administrateur : voir `droits.exiger_emprunt_pour`.
+    """
+    mission = mission_demandee(p)
+    if mission is not None:
+        exiger_emprunt_pour(mission.name, utilisateur, utilisateur, p)
+    return mission
 
 
 # --------------------------------------------------------------------------
@@ -351,7 +365,7 @@ def materiel_seuil(utilisateur, p):
 def materiel_emprunt(utilisateur, p):
     m = article(texte(p, "nom", maxi=200))
     n = qte(p)
-    mission = mission_demandee(p)
+    mission = mission_pour_emprunt(p, utilisateur)
     commentaire = texte(p, "commentaire", obligatoire=False, maxi=500)
 
     libre = m.disponible()
@@ -389,7 +403,7 @@ def materiel_emprunt_groupe(utilisateur, p):
     from .packs import contenu_servi, pack_deja_dehors, pack_existant
     from .packs import commentaire_de_pack
 
-    mission = mission_demandee(p)
+    mission = mission_pour_emprunt(p, utilisateur)
     commentaire = texte(p, "commentaire", obligatoire=False, maxi=500)
 
     lignes = p.get("lignes") or []
@@ -471,6 +485,7 @@ def materiel_emprunt_groupe(utilisateur, p):
 def materiel_emprunt_retour(utilisateur, p):
     m = article(texte(p, "nom", maxi=200))
     r = ligne(list(m.emprunts.all()), p, "ligne d'emprunt")
+    exiger_rendre(r, utilisateur, p)
     quantite, mission = r.qty, r.mission
     r.delete()
     journaux.materiel("RETOUR", m.nom_affiche, quantite, utilisateur, mission,
@@ -503,6 +518,7 @@ def materiel_mission_restituer_ligne(utilisateur, p):
     if r.mission == SANS_MISSION or not r.mission:
         raise ErreurAction("Cette ligne n'est affectée à aucune mission : rendez-la "
                            "par le retour habituel.")
+    exiger_rendre(r, utilisateur, p)
 
     mission = r.mission
     r.returned_by, r.returned_at = utilisateur, timezone.now()
@@ -572,6 +588,7 @@ def materiel_mission_restituer(utilisateur, p):
     de quelle sortie ils venaient.
     """
     nom = texte(p, "mission", maxi=200)
+    exiger_gestion(nom, utilisateur, p, "Restituer le matériel d'une mission")
     # `equipe` absente rend toute la mission ; présente, seulement cette
     # équipe. Une chaîne vide explicite rend ce qui n'a pas d'équipe.
     equipe = p.get("equipe")

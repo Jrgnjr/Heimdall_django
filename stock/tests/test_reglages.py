@@ -172,3 +172,31 @@ class DispositionDuProfil(TestCase):
                 {"id": "sac", "taille": "s"},
                 [{"id": "sac", "taille": "s"}] * 20):
             self.assertEqual(self.poser(self.alice, invalide).status_code, 422, invalide)
+
+
+class FiltresParColonne(ReglagesDuCompte):
+    """Les filtres des tableaux suivent le compte, et ne se laissent pas fabriquer."""
+
+    def test_les_filtres_sont_retrouves(self):
+        filtres = {"materiel": {"cat": "Outil", "article": "perceuse"},
+                   "stock": {"qte": "stock"}, "journal": {"type": "RETOUR"}}
+        self.assertEqual(self.poser(self.ouvrir("Alice"), colFiltres=filtres).status_code, 200)
+        self.assertEqual(self.lus(self.ouvrir("Alice"))["colFiltres"], filtres)
+        self.assertNotIn("colFiltres", self.lus(self.ouvrir("Bob")))
+
+    def test_un_tableau_inconnu_est_refuse(self):
+        self.assertEqual(self.poser(self.ouvrir("Alice"), colFiltres={"admin": {"x": "y"}}).status_code, 422)
+
+    def test_une_colonne_inconnue_est_refusee(self):
+        self.assertEqual(self.poser(self.ouvrir("Alice"), colFiltres={"materiel": {"prix": "1"}}).status_code, 422)
+
+    def test_une_valeur_qui_n_est_pas_du_texte_est_refusee(self):
+        self.assertEqual(self.poser(self.ouvrir("Alice"), colFiltres={"materiel": {"cat": 3}}).status_code, 422)
+        self.assertEqual(self.poser(self.ouvrir("Alice"), colFiltres={"materiel": {"cat": ["a"]}}).status_code, 422)
+
+    def test_une_valeur_trop_longue_est_refusee(self):
+        self.assertEqual(self.poser(self.ouvrir("Alice"), colFiltres={"materiel": {"article": "x" * 81}}).status_code, 422)
+
+    def test_la_forme_est_controlee(self):
+        for mauvais in ("texte", ["materiel"], {"materiel": "cat"}, None):
+            self.assertEqual(self.poser(self.ouvrir("Alice"), colFiltres=mauvais).status_code, 422, mauvais)

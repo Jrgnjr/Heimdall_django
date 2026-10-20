@@ -26,6 +26,7 @@ from comptes.models import Compte
 from ..models import Equipe, MaterialReservation, Mission
 from . import action, journaux
 from .champs import ErreurAction, ligne, texte
+from .droits import acteur, dans_le_groupe, est_admin, est_chef
 from .gestion import effectifs_de, exiger_gestion, gestionnaires_de
 from .statuts import statut_de
 
@@ -162,9 +163,16 @@ def mission_equipe_membres(utilisateur, p):
     Remplacer plutôt qu'ajouter et retirer un à un : l'interface envoie la
     composition telle qu'elle l'affiche, et rapprocher deux listes ici
     reviendrait à deviner ce que l'écran voulait dire.
+
+    Un gestionnaire (ou un administrateur) compose l'équipe comme il l'entend. Un
+    **chef de groupe**, qui ne gère pas la mission, ne peut y placer ou en retirer
+    que **ses** effectifs : le contrôle plus bas porte sur ce qui change.
     """
     mission = mission_existante(texte(p, "mission", maxi=200))
-    exiger_gestion(mission.name, utilisateur, p)
+    qui = acteur(p, utilisateur)
+    gestionnaire = est_admin(p) or qui in gestionnaires_de(mission.name)
+    if not gestionnaire and not est_chef(qui):
+        exiger_gestion(mission.name, utilisateur, p)
     nom = texte(p, "nom", maxi=200)
     equipe = equipe_existante(mission, nom)
 
@@ -190,6 +198,16 @@ def mission_equipe_membres(utilisateur, p):
     # On est gestionnaire ou effectif, pas les deux. Seuls les ajouts sont
     # contrôlés : quelqu'un déjà dans l'équipe n'est pas refusé rétroactivement.
     deja = set(equipe.membres.values_list("identifiant", flat=True))
+    if not gestionnaire:
+        # Chef de groupe : seuls les mouvements de ses effectifs lui reviennent.
+        etrangers = [c for c in (set(identifiants) ^ deja) if not dans_le_groupe(qui, c)]
+        if etrangers:
+            raise ErreurAction(
+                "Un chef de groupe ne place dans une équipe que ses propres effectifs "
+                "(%s n'en fait pas partie). Le reste est réservé aux gestionnaires "
+                "de la mission « %s » (%s) et aux administrateurs."
+                % (", ".join(sorted(etrangers)), mission.name,
+                   ", ".join(gestionnaires_de(mission.name)) or "aucun"))
     gestion = set(gestionnaires_de(mission.name))
     for identifiant in identifiants:
         if identifiant in gestion and identifiant not in deja:
@@ -230,6 +248,7 @@ def materiel_equipe_affecter(utilisateur, p):
             "Cette ligne n'est rattachée à aucune mission : il n'y a pas "
             "d'équipe où la mettre.")
 
+    exiger_gestion(r.mission, utilisateur, p, "Répartir le matériel d'une mission")
     mission = mission_existante(r.mission)
     voulue = texte(p, "equipe", obligatoire=False)
     cible = equipe_existante(mission, voulue).nom if voulue else SANS_EQUIPE
@@ -275,6 +294,7 @@ def materiel_mission_desassigner(utilisateur, p):
     if r.mission == Mission.SANS_MISSION or not r.mission:
         raise ErreurAction("Cette ligne n'est affectée à aucune mission.")
 
+    exiger_gestion(r.mission, utilisateur, p, "Désassigner du matériel")
     statut = statut_de(r.mission)
     if statut != Mission.PREVUE:
         raise ErreurAction(

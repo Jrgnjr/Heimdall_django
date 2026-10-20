@@ -2,7 +2,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
 
-from .models import ActiviteCompte, Compte, Dotation
+from .models import ActiviteCompte, Compte, Dotation, Groupe
 
 
 class DotationInline(admin.TabularInline):
@@ -38,8 +38,8 @@ class CompteAdmin(UserAdmin):
 
     fieldsets = (
         (None, {"fields": ("identifiant", "password")}),
-        ("Métier", {"fields": ("groupe", "administrateur", "actif",
-                               "doit_changer")}),
+        ("Métier", {"fields": ("groupe", "administrateur", "membre_de",
+                               "actif", "doit_changer")}),
         ("Django", {"fields": ("is_staff", "is_superuser", "groups",
                               "user_permissions")}),
         ("Dates", {"fields": ("cree_le", "derniere_visite", "last_login")}),
@@ -47,7 +47,8 @@ class CompteAdmin(UserAdmin):
     add_fieldsets = (
         (None, {"classes": ("wide",),
                 "fields": ("identifiant", "password1", "password2",
-                           "groupe", "administrateur", "doit_changer")}),
+                           "groupe", "administrateur", "membre_de",
+                           "doit_changer")}),
     )
 
 
@@ -56,3 +57,9 @@ class ActiviteCompteAdmin(admin.ModelAdmin):
     list_display = ("horodatage", "acteur", "action", "ancien_nom", "nouveau_nom")
     search_fields = ("acteur", "action", "ancien_nom", "nouveau_nom")
     date_hierarchy = "horodatage"
+
+
+@admin.register(Groupe)
+class GroupeAdmin(admin.ModelAdmin):
+    list_display = ("nom", "chef", "materiel", "cree_le")
+    search_fields = ("nom",)

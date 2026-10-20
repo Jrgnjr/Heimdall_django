@@ -15,7 +15,8 @@ from django.db.models import Max
 from ..models import MaterialReservation, Mission
 from . import action, journaux
 from .champs import ErreurAction, date_prevue, texte
-from .gestion import poser_gestionnaires, valider_gestionnaires
+from .droits import acteur, exiger_createur
+from .gestion import exiger_gestion, poser_gestionnaires, valider_gestionnaires
 from .statuts import ORDRE, changement_permis, peut_reculer, statut_de
 
 
@@ -38,6 +39,7 @@ def mission_creer(utilisateur, p):
     """
     from .templates import choix_exemplaires, servir_template
 
+    exiger_createur(utilisateur, p)
     nom = texte(p, "nom", maxi=200)
     existante = Mission.objects.filter(pk=nom).first()
     if existante is not None and existante.is_meta:
@@ -83,6 +85,7 @@ def mission_creer(utilisateur, p):
 @action("mission.date")
 def mission_date(utilisateur, p):
     m = mission_existante(texte(p, "nom", maxi=200))
+    exiger_gestion(m.name, utilisateur, p, "Changer la date")
     m.planned_date = date_prevue(p)
     m.save(update_fields=["planned_date"])
     return "Date de « %s » modifiée" % m.name, [["mission", m.name]]
@@ -107,10 +110,14 @@ def mission_statut(utilisateur, p):
         m = Mission.objects.create(name=nom, ordre=None, is_meta=False,
                                    owner="", archived=False)
 
+    # Changer le statut, c'est la charge du gestionnaire de la mission : ni un
+    # effectif ni un chef de groupe qui ne la gère pas n'y touchent.
+    exiger_gestion(nom, utilisateur, p, "Changer le statut")
+
     actuel = statut_de(nom)
     permis, raison = changement_permis(
         actuel, statut, m,
-        peut_reculer(m, utilisateur, p.get("_administrateur")))
+        peut_reculer(m, acteur(p, utilisateur), p.get("_administrateur")))
     if not permis:
         raise ErreurAction(raison)
 
@@ -131,6 +138,7 @@ def mission_archiver(utilisateur, p):
     m = Mission.objects.filter(pk=nom).first()
     if m is None:
         raise ErreurAction("La mission « %s » n'existe plus." % nom)
+    exiger_gestion(nom, utilisateur, p, "Archiver une mission")
     m.archived = archive
     m.save(update_fields=["archived"])
     return ("« %s » %s" % (nom, "archivée" if archive else "désarchivée"),

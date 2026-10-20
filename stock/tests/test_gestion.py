@@ -10,6 +10,7 @@ from comptes.models import Compte, Dotation
 from stock.models import (Equipe, GestionMission, Material, MaterialLog,
                           MaterialReservation, Mission)
 from stock.services import ErreurAction, executer
+from stock.tests.aide_groupes import faire_groupe
 from stock.services.gestion import (effectifs_de, gestion_par_mission,
                                     gestionnaires_de, peut_gerer)
 from stock.services.prets import etat_prets
@@ -21,10 +22,15 @@ class Base(TestCase):
     """Alice crée « Chantier » ; Bob, Carole, Dave sont des comptes ordinaires."""
 
     def setUp(self):
-        for nom, admin in (("Alice", False), ("Bob", False), ("Carole", False),
-                           ("Dave", False), ("Admin", True)):
-            Compte.objects.create_user(nom, password=MOT_DE_PASSE,
-                                       administrateur=admin, doit_changer=False)
+        # Alice et Carole sont chefs de groupe : créer une mission leur est réservé,
+        # comme aux administrateurs.
+        for nom, admin, chef in (("Alice", False, True), ("Bob", False, False),
+                                 ("Carole", False, True), ("Dave", False, False),
+                                 ("Admin", True, False)):
+            Compte.objects.create_user(nom, password=MOT_DE_PASSE, administrateur=admin,
+                                       doit_changer=False)
+            if chef:
+                faire_groupe("G-" + nom, chef=nom)
         Material.objects.create(name="Perceuse", libelle="Perceuse", ordre=1,
                                 cat="Outil", qty=5, seuil=0, affectation="Commun")
         Material.objects.create(name="Clé USB", libelle="Clé USB", ordre=2,
@@ -220,10 +226,10 @@ class DroitsSurLesEquipes(Base):
         for action, params in (
                 ("mission.equipe.creer", {"nom": "Est"}),
                 ("mission.equipe.renommer", {"nom": "Nord", "nouveauNom": "Ouest"}),
-                ("mission.equipe.membres", {"nom": "Nord", "membres": ["Carole"]}),
+                ("mission.equipe.membres", {"nom": "Nord", "membres": ["Dave"]}),
                 ("mission.equipe.supprimer", {"nom": "Nord"})):
             self.assertIn("Réservé aux gestionnaires",
-                          self.refus(action, "Carole", mission="Chantier", **params))
+                          self.refus(action, "Dave", mission="Chantier", **params))
         self.assertEqual(Equipe.objects.get().nom, "Nord")
 
     def test_un_administrateur_les_compose_partout(self):
@@ -241,7 +247,7 @@ class DroitsSurLesStatuts(Base):
         super().setUp()
         self.creer(gestionnaires=["Alice", "Bob"])
         self.equipe(membres=["Dave"])
-        self.agir("mission.statut", "Carole", nom="Chantier", statut="TERMINÉE")
+        self.agir("mission.statut", "Alice", nom="Chantier", statut="TERMINÉE")
 
     def test_chaque_gestionnaire_peut_reculer(self):
         self.agir("mission.statut", "Bob", nom="Chantier", statut="EN COURS")

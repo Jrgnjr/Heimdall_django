@@ -73,6 +73,13 @@ class Compte(AbstractBaseUser, PermissionsMixin):
     # l'autre, et chaque compte retrouve les siens en se connectant.
     reglages = models.JSONField("réglages", default=dict, blank=True)
 
+    # Le groupe auquel appartient le compte (voir `Groupe`). Un groupe est une entité
+    # à part entière : il existe avant d'avoir un chef, et il survit à son départ.
+    membre_de = models.ForeignKey(
+        "comptes.Groupe", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="membres", verbose_name="groupe",
+        help_text="Le groupe dont ce compte est membre.")
+
     # Récupération d'un mot de passe oublié (voir comptes/recuperation.py). Le
     # code n'est jamais stocké en clair : `code_recuperation` en est l'empreinte.
     code_recuperation = models.CharField("empreinte du code de récupération",
@@ -105,6 +112,26 @@ class Compte(AbstractBaseUser, PermissionsMixin):
     # d'un compte « actif ». Un seul champ, deux noms, et pas de recopie à
     # tenir à jour.
     @property
+    def role(self):
+        """administrateur, chef de groupe ou effectif — le plus haut l'emporte."""
+        if self.administrateur:
+            return "admin"
+        return "chef de groupe" if self.chef_de_groupe else "effectif"
+
+    # Le rôle de chef est porté par le **groupe** (`Groupe.chef`), pas par le compte :
+    # ces deux propriétés le relisent, pour que le reste du code parle de « chef de
+    # groupe » sans connaître la table.
+    @property
+    def chef_de_groupe(self):
+        return bool(self.pk) and Groupe.objects.filter(chef_id=self.pk).exists()
+
+    @property
+    def chef_id(self):
+        """Le chef du groupe de ce compte, s'il en a un et que ce n'est pas lui."""
+        g = self.membre_de
+        return g.chef_id if g is not None and g.chef_id and g.chef_id != self.pk else None
+
+    @property
     def is_active(self):
         return self.actif
 
@@ -124,6 +151,47 @@ class Compte(AbstractBaseUser, PermissionsMixin):
         """
         groupe = (self.groupe or "").strip()
         return "Groupe %s" % groupe if groupe else "Commun"
+
+
+class Groupe(models.Model):
+    """Un groupe de personnes, créé et réglé par un administrateur.
+
+    Il existe **indépendamment de son chef** : on le crée, on y place des membres, et
+    l'on nomme un chef plus tard — ou jamais. Sans chef, les membres se voient quand
+    même entre eux (page « Mon groupe »), et seuls les administrateurs le gèrent.
+
+    `materiel` fait le lien avec le stock : « 1 », « 2 » ou « 3 » désigne l'étiquette
+    « Groupe n » de l'affectation des articles.
+
+    Le chef est lui-même membre de son groupe (`Compte.membre_de`), et ne dirige
+    qu'un seul groupe.
+    """
+    CHOIX_MATERIEL = [("1", "Groupe 1"), ("2", "Groupe 2"), ("3", "Groupe 3")]
+
+    nom = models.CharField("nom", max_length=80, unique=True)
+    materiel = models.CharField(
+        "matériel affecté", max_length=1, blank=True, default="",
+        choices=CHOIX_MATERIEL,
+        help_text="L'étiquette « Groupe n » du stock de matériel qui désigne celui de "
+                  "ce groupe.")
+    chef = models.OneToOneField(
+        "comptes.Compte", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="groupe_dirige", verbose_name="chef de groupe")
+    cree_le = models.DateTimeField("créé le", default=timezone.now)
+
+    class Meta:
+        db_table = "groupes"
+        verbose_name = "groupe"
+        verbose_name_plural = "groupes"
+        ordering = ["nom"]
+
+    def __str__(self):
+        return self.nom
+
+    @property
+    def affectation(self):
+        """L'étiquette du stock (« Groupe 2 »), ou "" si aucun matériel n'est affecté."""
+        return "Groupe %s" % self.materiel if self.materiel else ""
 
 
 class Dotation(models.Model):

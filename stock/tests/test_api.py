@@ -109,9 +109,14 @@ class ContratAPI(TestCase):
                              "admin": True, "comptes": ["Admin"],
                              "reglages": {}, "dotations": {},
                              "pret": {"recues": [], "emises": [], "prets": [], "sacs": {},
-                                      "missions": []},
+                                      "missions": [], "recuesGroupe": []},
                              "plancherMissions": {}, "gestionMissions": {},
-                             "annuaire": ["Admin"]})
+                             "annuaire": ["Admin"],
+                             "moi": {"role": "admin", "chef": "", "effectifs": [], "groupe": None},
+                             "comptesRoles": {"Admin": {"role": "admin", "chef": "",
+                                                        "groupe": None, "actif": True,
+                                                        "visite": None}},
+                             "groupes": []})
 
     def test_un_retard_trop_grand_renvoie_l_etat_complet(self):
         """Sans les opérations intermédiaires, un différentiel mentirait."""

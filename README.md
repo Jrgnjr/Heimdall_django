@@ -102,9 +102,10 @@ marqué *« forcé par X »* chez le prêteur, et le journal en garde la trace.
 ### Comptes, profil et réglages
 
 - Un **profil** par compte, comme page d'ouverture, composé de **widgets** : on
-  choisit lesquels, leur ordre (glisser-déposer) et leur taille. 14 widgets au
+  choisit lesquels, leur ordre (glisser-déposer) et leur taille. 15 widgets au
   catalogue (compteurs, sac, sorties, missions, activité, à recommander, mes prêts,
-  mes demandes, stock bas, mes équipes, état du stock, accès rapides…).
+  mes demandes, stock bas, mes équipes, état du stock, accès rapides, et **Mon
+  groupe** pour les chefs de groupe…).
 - Des **réglages** par compte, enregistrés sur le serveur — ils suivent la personne
   d'un poste à l'autre : thème **sombre / clair / automatique**, lignes par page,
   filtres.
@@ -118,28 +119,127 @@ marqué *« forcé par X »* chez le prêteur, et le journal en garde la trace.
 
 ## Rôles et droits
 
-Trois rôles, dont un **propre à chaque mission**.
+Quatre rôles. Trois sont portés par le **compte**, le quatrième est propre à
+**chaque mission**.
 
-| | Utilisateur | Gestionnaire *(d'une mission)* | Effectif *(d'une mission)* | Administrateur |
+| Rôle | Portée | En deux mots |
+|---|---|---|
+| **Effectif** | Compte (rôle de base) | Il travaille, emprunte pour lui, demande du matériel, répond aux demandes de son sac |
+| **Chef de groupe** | Compte | Il a un **groupe** d'effectifs. Il crée des missions et répond à leur place quand ils sont absents |
+| **Gestionnaire de mission** | Une mission | Il a la charge d'*une* mission : statut, équipes, matériel, prêts forcés |
+| **Admin** | Compte | Tous les droits, y compris ceux d'un gestionnaire sur **toutes** les missions |
+
+La hiérarchie est *admin ⊃ chef de groupe ⊃ effectif*. Le gestionnaire est à part :
+un effectif comme un chef de groupe peut l'être, et **aucun ne l'est d'office** — le
+chef qui crée une mission peut la confier à quelqu'un d'autre sans la gérer.
+
+- Un **groupe** est une entité créée par un administrateur, avec ou sans chef (voir
+  « Les groupes »). Le chef de groupe est le membre qui le dirige.
+- Sur une même mission, on est **gestionnaire ou membre de l'effectif** (d'une de ses
+  équipes), jamais les deux. On peut gérer une mission et travailler sur une autre.
+
+### Ce que peut chaque rôle
+
+| Droit | Effectif | Chef de groupe | Gestionnaire *(sa mission)* | Admin |
 |---|:-:|:-:|:-:|:-:|
-| Consulter le stock, emprunter, rendre | ✓ | ✓ | ✓ | ✓ |
-| Créer une mission, avancer ou annuler son statut | ✓ | ✓ | ✓ | ✓ |
-| Demander du matériel dans un sac, répondre aux demandes de son sac | ✓ | ✓ | ✓ | ✓ |
-| Répartir le matériel d'une mission entre ses équipes | ✓ | ✓ | ✓ | ✓ |
-| Composer les équipes et l'effectif d'une mission | — | ✓ | — | ✓ |
-| Nommer les gestionnaires d'une mission | — | ✓ | — | ✓ |
-| **Forcer un prêt** dans le sac d'une personne | — | ✓ | — | ✓ |
-| **Revenir en arrière** sur le statut d'une mission | — | ✓ | — | ✓ |
-| Structure du stock (articles, armoires, seuils, templates, sacs, inventaire) | — | — | — | ✓ |
-| Supprimer une mission, importer un XLSX, agir au nom d'un autre | — | — | — | ✓ |
+| Consulter le stock, son profil, ses réglages | ✓ | ✓ | ✓ | ✓ |
+| Emprunter pour soi, **sans mission** | ✓ | ✓ | ✓ | ✓ |
+| Emprunter **pour une mission** | si équipier | si l'un de ses effectifs est équipier | ✓ | ✓ |
+| Rendre une ligne d'emprunt | la sienne | celles de ses effectifs | celles de sa mission | ✓ |
+| Demander du matériel dans un sac | ✓ | ✓ | ✓ | ✓ |
+| Répondre à une demande de **son** sac | ✓ | ✓, et **à la place de ses effectifs** | — | ✓ |
+| Forcer un prêt | — | dans les sacs de **son groupe** | ✓ | ✓ |
+| Créer une mission | — | ✓ | — | ✓ |
+| Statut, date, archivage d'une mission | — | — | ✓ | ✓ |
+| Reculer un statut | — | — | ✓ | ✓ |
+| Désassigner / restituer le matériel d'une mission | restituer **sa** ligne | — | ✓ | ✓ |
+| Répartir le matériel entre les équipes | — | — | ✓ | ✓ |
+| Composer les équipes d'une mission | — | placer **ses** effectifs | ✓ | ✓ |
+| Nommer les gestionnaires d'une mission | — | — | ✓ | ✓ |
+| Voir le profil d'un effectif, agir en son nom | — | **son groupe** | — | ✓ (tous) |
+| Composer le sac d'un effectif | — | **son groupe** | — | ✓ (tous) |
+| Structure du stock, templates, inventaire | — | — | — | ✓ |
+| Supprimer une mission, importer un XLSX | — | — | — | ✓ |
+| **Créer et régler les groupes** (membres, chef, matériel) | — | — | — | ✓ |
 
-- On est **gestionnaire ou effectif d'une mission, jamais les deux** sur la même
-  mission (mais on peut gérer l'une et travailler sur l'autre).
-- Un **administrateur** a les droits de gestionnaire sur **toutes** les missions.
-- Le créateur d'une mission la gère par défaut, et désigne les autres gestionnaires.
+### Filtres par colonne
+
+Les tableaux **Stock de matériel**, **Stock de téléphone** et **Journal** se filtrent
+colonne par colonne : un entonnoir à côté du titre ouvre le filtre de la colonne (une
+liste de valeurs déjà déroulée, ou un champ de saisie pour les textes). Les filtres se
+cumulent entre eux et avec la recherche ; l'entonnoir barré, en tête du tableau, les
+retire tous. Ils font partie des **réglages du compte** : on les retrouve d'une visite
+à l'autre, sur n'importe quel poste.
+
+### Les groupes
+
+Un **groupe** est une entité à part entière, créée par un administrateur : il existe
+**avant d'avoir un chef**, et peut rester sans chef. On y place des membres ; le **chef**
+est l'un d'eux, nommé quand on le souhaite. Un compte n'est membre que d'un groupe, un
+chef ne dirige qu'un groupe, et un administrateur n'appartient à aucun groupe.
+
+Sans chef, personne ne répond à la place d'un absent ni ne compose les sacs : seuls les
+administrateurs gèrent le groupe. Supprimer un groupe, ou retirer son chef, ne supprime
+aucun compte : les membres se retrouvent sans groupe (ou sans chef).
+
+Tout membre d'un groupe (avec ou sans chef) a une page **Mon groupe** dans le menu : les
+membres, ce que chacun détient (sac de dotation et emprunts), et le **matériel affecté au
+groupe** dans le stock. Elle est en lecture ; seuls le chef et les administrateurs
+modifient les sacs. Le serveur n'envoie à un membre que les sacs de son groupe.
+
+Le lien avec le stock de matériel est l'étiquette **Groupe 1 / 2 / 3** (colonne
+« affectation » du stock) : un administrateur choisit le « matériel affecté » **du
+groupe**. Sans choix, la page le dit et n'affiche aucun article ; l'étiquette « Commun »
+n'est celle d'aucun groupe.
+
+### Administrer les comptes
+
+**Administration → Comptes** montre une **vignette par compte** (avatar, nom, rôle,
+unités détenues). Un clic ouvre la **fiche** du compte, une grande fenêtre qui
+rassemble tout ce qu'un administrateur peut faire concernant cette personne :
+
+- **Rôle et groupe** : son groupe, et — s'il en a un — « Nommer chef du groupe » ou
+  « Retirer la direction ». Le rôle *admin* se règle dans l'administration Django
+  (`/admin/`), comme la création et le renommage d'un compte.
+- **Sécurité** : réinitialiser le mot de passe (un mot de passe provisoire de 12
+  caractères est affiché **une seule fois** et la personne doit le remplacer à sa
+  connexion ; ses sessions ouvertes se ferment), retirer son code de récupération,
+  **désactiver / réactiver** le compte.
+- **Sac, emprunts, missions** : son sac de dotation (avec « Modifier le sac »), ce
+  qu'elle détient, ses missions et leur statut. En pied : *Voir son profil* et
+  *Agir en son nom*.
+
+**Les groupes** se gèrent dans le bandeau « Groupes » au-dessus des vignettes :
+« + Nouveau groupe » (nom, matériel affecté), puis, dans la fenêtre du groupe, le
+renommer, choisir son chef (ou « sans chef »), ajouter ou retirer des membres, le
+supprimer.
+
+Filtres : Tous / Admins / Chefs / Effectifs, « Même sans possession », « Afficher les
+désactivés ».
+
+Garde-fous : un nom de groupe est unique, on ne nomme pas chef quelqu'un qui est membre
+d'un autre groupe ou qui en dirige déjà un, et déplacer ou retirer un chef lui ôte la
+direction de son groupe. On ne se désactive pas soi-même, on ne désactive pas le
+**dernier administrateur actif** (désactiver un chef lui retire la direction), et on ne
+réinitialise pas son propre mot de passe par ce biais. Un compte désactivé garde son
+historique, son sac et ses emprunts. Chaque changement est inscrit au registre des
+comptes ; le mot de passe provisoire n'est écrit ni dans l'historique ni dans le registre.
+
+> **À la première mise à jour vers ce système**, tous les comptes non administrateurs
+> deviennent *effectifs* : personne, sauf les administrateurs, ne peut plus créer de
+> mission tant que des chefs de groupe n'ont pas été nommés.
+
+### Qui agit : l'auteur et l'acteur
+
+Une action a deux identités : l'**auteur**, au nom de qui elle est enregistrée, et
+l'**acteur**, la personne réellement connectée. Elles diffèrent quand un
+administrateur ou un chef de groupe agit au nom de quelqu'un. **Les droits se jugent
+sur l'acteur** : un chef de groupe qui agit au nom d'un effectif garde son autorité de
+chef, et n'acquiert pas celle de gestionnaire d'une mission que cet effectif gérerait.
 
 Ces droits sont **vérifiés par le serveur**, jamais par l'interface seule : cacher
-un bouton n'empêche rien, c'est le refus côté serveur qui compte.
+un bouton n'empêche rien, c'est le refus côté serveur qui compte. Le serveur écrase
+toute identité ou tout droit que le client enverrait dans ses paramètres.
 
 ---
 
@@ -387,7 +487,7 @@ stock/             le métier
   api.py             /api/state, /api/action, /api/reglages
   etat.py            modèles → JSON pour l'interface (complet ou différentiel)
   views.py           la page, le tableau de bord d'une mission, /sante/
-  services/          les actions métier (55)
+  services/          les actions métier (62)
     __init__.py        registre des actions, droits, executer()
     champs.py          validation des paramètres, messages de refus
     journaux.py        écriture dans les journaux
@@ -395,8 +495,10 @@ stock/             le métier
     missions.py  equipes.py  templates.py  dotations.py
     statuts.py         ordre des statuts, plancher, droit de reculer
     gestion.py         gestionnaires et effectif d'une mission
+    droits.py          rôles : qui a le droit de quoi, contrôle de chaque action
+    roles.py           groupes, état, mot de passe et code de récupération d'un compte (admin)
     prets.py           demandes, acceptation, refus, prêts forcés
-  tests/             458 tests
+  tests/             631 tests
 templates/         index.html (l'interface), mission.html, pages de comptes
 static/            icône, logo
 docker/            point d'entrée du conteneur
@@ -421,8 +523,8 @@ Chaque action est une fonction qui valide ses paramètres, applique la règle,
 journalise, et **déclare ce qu'elle a touché**. Cela donne des règles testables sans
 HTTP, un contrat d'API stable, et un différentiel précis. Les actions réservées aux
 administrateurs sont listées en un seul endroit (`ACTIONS_ADMINISTRATEUR`) ; celles
-qui dépendent de la mission visée (équipes, prêts forcés, statut) contrôlent leur
-droit elles-mêmes.
+qui dépendent du rôle ou de la mission visée (équipes, prêts forcés, statut, sacs,
+retours) contrôlent leur droit elles-mêmes, par `services/droits.py`.
 
 ### Modèles principaux
 
@@ -432,7 +534,7 @@ droit elles-mêmes.
 | Matériel | `Material`, `MaterialReservation` (un emprunt, avec `sac_de` et `force_par`), `MaterialLog` |
 | Missions | `Mission` (statut imposé, plancher `status_max`), `Equipe`, `GestionMission`, `MissionTemplate` |
 | Sacs et prêts | `Dotation` (le sac), `DemandePret` |
-| Comptes | `Compte` (réglages JSON, code de récupération haché), `ActiviteCompte` |
+| Comptes | `Compte` (administrateur, groupe d'appartenance ; réglages JSON ; code de récupération haché), `Groupe` (nom, matériel affecté, chef facultatif), `ActiviteCompte` |
 
 Les noms de tables et de colonnes sont ceux de l'ancienne base : c'est ce qui permet
 de reprendre ses données sans conversion.
@@ -522,7 +624,10 @@ de l'image, et ce qui fait attendre le service `web` que la base soit prête.
 | « 403 — jeton CSRF incorrect » à la connexion | Une page de connexion restée ouverte depuis longtemps | Recharger la page |
 | Je ne vois pas mes réglages sur un autre poste | Ils sont par **compte** : vérifiez que vous êtes connecté avec le bon | — |
 | « Désassigner » est grisé | La mission n'est plus *prévue* | Utiliser « Restituer », ou faire repasser la mission à « prévue » (gestionnaire ou administrateur) |
-| Je ne peux pas reculer le statut | Seul un gestionnaire de la mission ou un administrateur le peut | Voir « Gestion et effectif » dans « Modifier » |
+| Je ne peux pas reculer, ni changer le statut | Seul un gestionnaire de la mission ou un administrateur le peut | Voir « Gestion et effectif » dans « Modifier » |
+| Je ne peux pas créer de mission | Réservé aux chefs de groupe et aux administrateurs | Un administrateur vous place dans un groupe et vous en nomme chef (Administration → Comptes) |
+| Je n'emprunte pas pour une mission | On n'emprunte pour une mission que si l'on en fait partie (équipier) | Demander à un gestionnaire de vous placer dans une équipe, ou emprunter sans mission |
+| Je ne vois pas « Mon groupe » | Vous n'êtes membre d'aucun groupe (le widget « Mon groupe » est réservé aux chefs) | Un administrateur vous place dans un groupe |
 | Je ne peux pas demander à une personne | Elle fait partie de l'effectif de la mission (elle emporte son sac), ou l'article n'est plus disponible dans son sac | Une ligne grisée « indisponible » est déjà sortie ou prêtée |
 | L'icône de l'onglet ne change pas | Cache du navigateur | Fermer l'onglet et rouvrir, ou vider le cache du site |
 | Un mot de passe oublié sans code de récupération | — | Un administrateur le réinitialise dans `/admin/` |
@@ -535,12 +640,14 @@ de l'image, et ce qui fait attendre le service `web` que la base soit prête.
 python manage.py test stock        # nécessite une base PostgreSQL joignable (DATABASE_URL)
 ```
 
-**458 tests**, qui couvrent les règles métier domaine par domaine, le contrat HTTP de
+**631 tests**, qui couvrent les règles métier domaine par domaine, le contrat HTTP de
 l'API et le déploiement. Ils vérifient en particulier ce qui ne se voit pas à l'œil
 nu :
 
-- **les droits** — qui peut forcer un prêt, reculer un statut, composer une équipe,
-  et qu'un client ne peut pas se déclarer administrateur ;
+- **les droits et les rôles** — pour chaque ligne du tableau des rôles : qui peut créer
+  une mission, emprunter pour une mission, rendre une ligne, répondre à la place d'un
+  absent, forcer un prêt, composer une équipe ; la hiérarchie des chefs de groupe ;
+  et qu'un client ne peut pas se déclarer administrateur ni usurper un acteur ;
 - **la non-régression des statuts** — y compris quand le statut calculé aurait
   reculé (dernier emprunt rendu, date repoussée) ;
 - **l'exclusivité gestionnaire / effectif**, dans les deux sens ;

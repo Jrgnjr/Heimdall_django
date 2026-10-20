@@ -56,12 +56,19 @@ def peut_gerer(nom, utilisateur, administrateur):
     return bool(administrateur) or utilisateur in gestionnaires_de(nom)
 
 
-def exiger_gestion(nom, utilisateur, p):
-    """Refuse, en le disant, à qui n'a pas la gestion de cette mission."""
-    if not peut_gerer(nom, utilisateur, p.get("_administrateur")):
-        raise ErreurAction(
-            "Réservé aux gestionnaires de la mission « %s » (%s) et aux "
-            "administrateurs." % (nom, ", ".join(gestionnaires_de(nom)) or "aucun"))
+def exiger_gestion(nom, utilisateur, p, ce_qui=None):
+    """Refuse, en le disant, à qui n'a pas la gestion de cette mission.
+
+    Les droits se jugent sur l'**acteur** — la personne réellement connectée —, pas
+    sur l'auteur au nom de qui l'on agit (voir `droits.py`).
+    """
+    from .droits import acteur
+    if peut_gerer(nom, acteur(p, utilisateur), p.get("_administrateur")):
+        return
+    raise ErreurAction(
+        "%séservé aux gestionnaires de la mission « %s » (%s) et aux "
+        "administrateurs." % (ce_qui + " : r" if ce_qui else "R", nom,
+                              ", ".join(gestionnaires_de(nom)) or "aucun"))
 
 
 def gestion_par_mission():

@@ -54,7 +54,13 @@ ACTIONS_ADMINISTRATEUR = {
     "mission.template.supprimer",
     # Le sac de dotation engage ce qu'une personne détient durablement : le
     # composer relève de l'encadrement, pas du travail quotidien.
-    "compte.dotations",
+    "groupe.creer",
+    "groupe.modifier",
+    "groupe.supprimer",
+    "groupe.membre",
+    "compte.etat",
+    "compte.mot_de_passe",
+    "compte.recuperation",
     # Composer les équipes d'une mission, c'est de l'organisation : réservé à ses
     # gestionnaires et aux administrateurs — le contrôle est dans chaque action
     # (`gestion.exiger_gestion`), qui connaît la mission visée. Y répartir le
@@ -80,10 +86,10 @@ def charger():
     pas encore chargés au moment où ce paquet l'est.
     """
     from . import (armoires, dotations, equipes, materiel,  # noqa: F401
-                   missions, packs, prets, telephones, templates)
+                   missions, packs, prets, roles, telephones, templates)
 
 
-def executer(nom, utilisateur, params, administrateur=False):
+def executer(nom, utilisateur, params, administrateur=False, acteur=None):
     """Exécute une action et retourne (résumé, cibles touchées).
 
     Ne gère ni transaction ni version : c'est le rôle de `stock.api`, qui sait
@@ -100,10 +106,16 @@ def executer(nom, utilisateur, params, administrateur=False):
     # modifient en place — pour ne pas garder un fichier entier dans l'historique —
     # et que l'appelant doit voir ce changement. La clé est retirée au retour : elle
     # n'a pas à figurer dans l'historique.
+    #
+    # `_acteur` est la personne réellement connectée, qui peut différer de l'auteur
+    # (un administrateur ou un chef de groupe qui agit au nom d'un autre) : les droits
+    # se jugent sur elle (voir `droits.py`).
     if params is None:
         params = {}
     params["_administrateur"] = bool(administrateur)
+    params["_acteur"] = acteur or utilisateur
     try:
         return fn(utilisateur, params)
     finally:
         params.pop("_administrateur", None)
+        params.pop("_acteur", None)

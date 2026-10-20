@@ -167,6 +167,8 @@ button{cursor:pointer}
 .badge.warn{background:rgba(240,180,90,.14);color:var(--c-f0b45a)}
 .badge.bad{background:rgba(224,90,80,.14);color:var(--c-ef8b83)}
 .badge.info{background:rgba(42,107,242,.14);color:var(--c-8fb4ff)}
+.badge.violet{background:rgba(155,110,240,.18);color:#b99bff}
+html[data-theme="light"] .badge.violet{background:rgba(124,77,216,.13);color:#6b3fc4}
 .badge.mut{background:var(--c-1f232a);color:var(--c-9aa2af)}
 
 .loctag{font:500 11px/1 Archivo,sans-serif;color:var(--c-8fb4ff);background:rgba(42,107,242,.13);border:1px solid rgba(42,107,242,.32);border-radius:5px;padding:4px 7px;letter-spacing:.06em;white-space:nowrap;display:inline-block}
@@ -211,6 +213,8 @@ button{cursor:pointer}
 
 .nav-btn{display:flex;align-items:center;gap:10px;padding:9px 10px;border:1px solid transparent;border-radius:8px;text-align:left;font:500 12.5px Archivo,sans-serif;background:transparent;color:var(--c-868d99);width:100%}
 .nav-btn.on{background:var(--c-1a1f28);color:var(--c-f2f4f8);border-color:var(--c-2b3444)}
+.nav-ico{width:18px;height:18px;flex:none;display:block;opacity:.9}
+.nav-btn.on .nav-ico{opacity:1}
 .nic{width:14px;height:14px;flex:none;border:1.5px solid currentColor;border-radius:3px;display:block;opacity:.85}
 
 .rowhov:hover{background:var(--c-1b1f26)}
@@ -264,9 +268,98 @@ const ROW_H = 40;            // densité "compacte"
    de plus. En-tête et lignes sont deux grilles distinctes : toute largeur qui
    se résoudrait différemment dans l'une et dans l'autre — `auto`, par exemple —
    les désalignerait. */
-const PH_GRID  = () => "minmax(130px,2.4fr) 104px 40px " + (ADMIN ? "186px" : "92px");
-const MAT_GRID = () => "26px minmax(110px,2.2fr) minmax(80px,1fr) 108px 44px "
+const PH_GRID  = () => "minmax(130px,2.4fr) 124px 62px " + (ADMIN ? "186px" : "92px");
+const MAT_GRID = () => "36px minmax(110px,2.2fr) minmax(80px,1fr) 128px 64px "
   + "minmax(84px,1.5fr) " + (ADMIN ? "198px" : "100px");
+
+/* ---------- filtres par colonne ----------
+
+   Chaque tableau (matériel, téléphones, journal) a un jeu de filtres, un par colonne.
+   Un entonnoir à côté du titre d'une colonne ouvre le sien juste dessous ; un
+   entonnoir barré, en tête du tableau, les retire tous. Les filtres sont des réglages
+   du compte : ils se retrouvent d'une visite à l'autre. */
+const FILTRES_VIDES = {
+  materiel:{article:"", cat:"", affectation:"", qte:"", mission:"", reservation:""},
+  stock:{reference:"", emplacement:"", qte:"", casier:""},
+  journal:{date:"", article:"", qte:"", personne:"", mission:"", type:""},
+};
+const PAGE_DU_TABLEAU = {materiel:"stockMaterialPage", stock:"stockPhonePage", journal:"logPage"};
+/* Ce qui vient du serveur est relu contre les colonnes connues : une colonne retirée
+   ou un réglage abîmé ne doit pas laisser un filtre invisible qui masque des lignes. */
+function normaliserFiltres(){
+  const n = {};
+  Object.keys(FILTRES_VIDES).forEach(t=>{
+    n[t] = Object.assign({}, FILTRES_VIDES[t]);
+    const lu = (S.colFiltres||{})[t] || {};
+    Object.keys(n[t]).forEach(c=>{ if(typeof lu[c] === "string") n[t][c] = lu[c]; });
+  });
+  S.colFiltres = n;
+  S.colOuverts = S.colOuverts || {};
+}
+const filtresDe = t=>S.colFiltres[t];
+const colonnesFiltrees = t=>Object.keys(S.colFiltres[t]).filter(c=>S.colFiltres[t][c] !== "");
+function poserFiltre(t, col, valeur, fermer){
+  const ouverts = Object.assign({}, S.colOuverts[t] || {});
+  if(fermer) ouverts[col] = false;
+  set({
+    colFiltres:Object.assign({}, S.colFiltres, {[t]:Object.assign({}, S.colFiltres[t], {[col]:valeur})}),
+    colOuverts:Object.assign({}, S.colOuverts, {[t]:ouverts}),
+    [PAGE_DU_TABLEAU[t]]:0});
+}
+function effacerFiltres(t){
+  set({
+    colFiltres:Object.assign({}, S.colFiltres, {[t]:Object.assign({}, FILTRES_VIDES[t])}),
+    colOuverts:Object.assign({}, S.colOuverts, {[t]:{}}),
+    [PAGE_DU_TABLEAU[t]]:0});
+}
+const SVG_ENTONNOIR = `<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18l-7 8.5V20l-4-2v-5.5z"/></svg>`;
+const SVG_ENTONNOIR_BARRE = `<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M3 4h18l-7 8.5V20l-4-2v-5.5z" opacity=".85"/><path d="M3 21 21 3" stroke="var(--c-15181d)" stroke-width="5" stroke-linecap="round"/><path d="M3 21 21 3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+
+/* Le bouton qui retire tous les filtres d'un tableau : grisé quand il n'y en a pas. */
+function boutonToutEffacer(t){
+  const n = colonnesFiltrees(t).length;
+  return `<button title="${n?"Retirer tous les filtres ("+n+")":"Aucun filtre actif"}" ${n?"":"disabled"} ${on(()=>effacerFiltres(t))}
+    style="width:15px;height:15px;flex:none;padding:0;border:0;border-radius:4px;display:grid;place-items:center;background:${n?"rgba(42,107,242,.2)":"transparent"};color:${n?"var(--c-8fb4ff)":"var(--c-4a5058)"};cursor:${n?"pointer":"default"}">${SVG_ENTONNOIR_BARRE}</button>`;
+}
+
+/* Un titre de colonne filtrable. `ctl` décrit le filtre :
+     { label, texte:"indication" }            un champ de saisie,
+     { label, liste:[[valeur, libellé]…], tous:"Toutes" }   une liste déjà déroulée.
+   `avant` s'insère devant le titre (le bouton « tout effacer » de certains tableaux). */
+function thFiltrable(t, col, titre, ctl, style, droite, avant){
+  const valeur = S.colFiltres[t][col];
+  const actif = valeur !== "";
+  const ouvert = !!(S.colOuverts[t] || {})[col];
+  const cle = "col-"+t+"-"+col;
+  const fermer = ()=>setT({colOuverts:Object.assign({}, S.colOuverts, {[t]:Object.assign({}, S.colOuverts[t]||{}, {[col]:false})})});
+  let contenu;
+  if(ctl.liste){
+    contenu = `<div data-k="${cle}" style="display:flex;flex-direction:column;gap:1px;max-height:260px;overflow:auto">
+      ${[["", ctl.tous || "Toutes"], ...ctl.liste].map(([v, l])=>`
+        <button ${on(()=>poserFiltre(t, col, v, true))}
+          style="display:flex;align-items:center;gap:8px;width:100%;padding:7px 9px;border:0;border-radius:6px;text-align:left;font:500 12px Archivo,sans-serif;background:${valeur===v?"rgba(42,107,242,.16)":"transparent"};color:${valeur===v?"var(--c-8fb4ff)":"var(--c-c3c9d3)"}">
+          <span style="width:12px;flex:none">${valeur===v?"✓":""}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(l)}</span>
+        </button>`).join("")}
+    </div>`;
+  }else{
+    contenu = `<span class="klabel">${esc(ctl.label.toUpperCase())}</span>
+      <input class="inp" data-k="${cle}" style="padding:6px 8px;font-size:12px;width:100%" placeholder="${esc(ctl.texte)}" value="${esc(valeur)}" ${oni(e=>poserFiltre(t, col, e.target.value, false))}>
+      ${actif ? `<button class="btn-mini hwhite" style="align-self:flex-start" ${on(()=>poserFiltre(t, col, "", true))}>Effacer ce filtre</button>` : ""}`;
+  }
+  const panneau = !ouvert ? "" : `
+    <div style="position:fixed;inset:0;z-index:40" ${on(fermer)}></div>
+    <div style="position:absolute;top:calc(100% + 2px);${droite?"right":"left"}:0;z-index:41;width:${ctl.liste?"210px":"230px"};padding:${ctl.liste?"5px":"11px 12px"};display:flex;flex-direction:column;gap:8px;background:var(--c-15181d);border:1px solid var(--c-2b2f37);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.5);font-weight:400;letter-spacing:normal;text-transform:none">${contenu}</div>`;
+  return `<div class="th" style="position:relative;display:flex;align-items:center;gap:5px;min-width:0;${droite?"justify-content:flex-end;":""}${style||""}">
+    ${avant||""}
+    <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${titre}</span>
+    <button title="Filtrer cette colonne" ${on(()=>{
+        setT({colOuverts:Object.assign({}, S.colOuverts, {[t]:Object.assign({}, S.colOuverts[t]||{}, {[col]:!ouvert})})});
+        if(!ouvert) setTimeout(()=>{ const el = document.querySelector('[data-k="'+cle+'"]'); if(el && el.focus) el.focus(); }, 0);
+      })}
+      style="flex:none;padding:3px;border-radius:4px;border:0;background:${actif?"rgba(42,107,242,.2)":ouvert?"var(--c-232a35)":"transparent"};color:${actif?"var(--c-8fb4ff)":"var(--c-6d7480)"};display:grid;place-items:center">${SVG_ENTONNOIR}</button>
+    ${panneau}
+  </div>`;
+}
 
 /* Affectations du matériel : liste fermée, qui doit rester identique à
    AFFECTATIONS dans stock/models.py. Le serveur refuse toute autre valeur. */
@@ -281,7 +374,7 @@ const CATEGORIES_MATERIEL = ["Stockage", "Dongle", "Outil", "Ordinateur", "Conso
    utilise au retour de mission, et ne rentre alors pas au stock. Doit rester
    identique a CATEGORIE_CONSOMMABLE dans coeur/base.py. */
 const CATEGORIE_CONSOMMABLE = "Consommable";
-const LOG_GRID = "104px minmax(130px,2fr) 52px minmax(90px,1fr) minmax(90px,1fr) 92px";
+const LOG_GRID = "104px minmax(130px,2fr) 68px minmax(90px,1fr) minmax(90px,1fr) 92px";
 const LOG_PAGE_SIZE = 20;      // repli si la mesure n'a pas encore eu lieu
 const LOG_ROW_H = 44;
 const STOCK_PAGE_SIZE = 20;
@@ -367,7 +460,7 @@ function seed(){
     movements:[],
     materiel:[],
     dotations:{},
-    matCat:"Toutes", matQuery:"", matSel:{}, matGroups:{}, matRes:{}, matLog:[], logFilter:"Tous", logQuery:"", logPage:0,
+    matCat:"Toutes", matQuery:"", colFiltres:JSON.parse(JSON.stringify(FILTRES_VIDES)), colOuverts:{}, matSel:{}, matGroups:{}, matRes:{}, matLog:[], logFilter:"Tous", logQuery:"", logPage:0,
     missions:[], missionStatus:{}, templates:[], showArchived:false, missionsVue:"missions",
     equipes:[], equipeEdit:null, membresEdit:null,
     packs:[], packOuverts:{}, packsReplies:false, packSel:{},
@@ -375,16 +468,16 @@ function seed(){
     form:null, opMode:null, opForm:null,
     matReceptForm:null, matResForm:null, matBatch:null, releaseForm:null, editMission:null,
     packEdit:null, packBorrow:null,
-    userMenu:false, possessions:false, possessionsTab:"dotation", stockPhonePage:0, stockPhonePageSize:"auto", stockMaterialPage:0, stockMaterialPageSize:"auto", adminTab:"phones", adminPhoneQuery:"", adminMaterialQuery:"", adminMissionQuery:"", adminPhonePage:0, adminMaterialPage:0, adminConsoPage:0, consoOuverts:{}, profilDe:null, reglagesOuverts:false, profilEdition:false, profilWidgets:null, pret:{recues:[],emises:[],prets:[],sacs:{},missions:[]}, plancherMissions:{}, gestionMissions:{}, annuaire:[], _mGestion:null, demandePret:null, refusPret:null, _mDemandes:[], adminPhoneSize:20, adminMaterialSize:20, adminConsoSize:20, adminMissionPage:0, adminTemplateQuery:"", adminTemplatePage:0, templateEdit:null, adminConsoQuery:"",
+    userMenu:false, possessions:false, possessionsTab:"dotation", stockPhonePage:0, stockPhonePageSize:"auto", stockMaterialPage:0, stockMaterialPageSize:"auto", adminTab:"phones", adminPhoneQuery:"", adminMaterialQuery:"", adminMissionQuery:"", adminPhonePage:0, adminMaterialPage:0, adminConsoPage:0, consoOuverts:{}, profilDe:null, reglagesOuverts:false, profilEdition:false, profilWidgets:null, pret:{recues:[],emises:[],prets:[],sacs:{},missions:[],recuesGroupe:[]}, plancherMissions:{}, gestionMissions:{}, annuaire:[], moi:{role:"effectif",chef:"",effectifs:[]}, comptesRoles:{}, groupes:[], groupeEdit:null, sacMembre:null, _mGestion:null, demandePret:null, refusPret:null, _mDemandes:[], adminPhoneSize:20, adminMaterialSize:20, adminConsoSize:20, adminMissionPage:0, adminTemplateQuery:"", adminTemplatePage:0, templateEdit:null, adminConsoQuery:"",
     identForm:null, lotForm:null,
-    adminCompteQuery:"", adminComptesActifs:false, dotationEdit:null, attributionEdit:null,
+    adminCompteQuery:"", adminComptesActifs:false, adminComptesInactifs:false, adminComptesRole:"", fiche:null, motDePasseProvisoire:null, dotationEdit:null, attributionEdit:null,
     _mChoix:{}, _mDeplie:{}, missionChecks:{}
   };
 }
 
 /* données partagées entre tous les utilisateurs (serveur) vs préférences locales du poste */
 const SHARED = ["refs","cabinets","assignments","movements","materiel","matRes","matLog","missions","missionStatus","templates","packs","equipes","dotations"];
-const PREFS  = ["theme","profilWidgets","brand","cabinet","matCat","logFilter","showArchived","stockPhonePageSize","stockMaterialPageSize","adminPhoneSize","adminMaterialSize","adminConsoSize"];
+const PREFS  = ["theme","profilWidgets","colFiltres","brand","cabinet","matCat","logFilter","showArchived","stockPhonePageSize","stockMaterialPageSize","adminPhoneSize","adminMaterialSize","adminConsoSize"];
 const SERVER = location.protocol === "http:" || location.protocol === "https:";
 
 let version = 0, online = true, enCours = false;
@@ -486,6 +579,7 @@ function savePrefs(){
 }
 function appliquerReglages(r){
   if(r) PREFS.forEach(k=>{ if(r[k]!==undefined) S[k]=r[k]; });
+  normaliserFiltres();
   appliquerTheme();
   dernierEnvoi = JSON.stringify(reglagesCourants());
 }
@@ -495,7 +589,7 @@ function appliquerReglages(r){
    rattachée au compte, pour qu'un autre compte ne reprenne pas la page du
    précédent. */
 const CLE_PAGE = "heimdall_page";
-const PAGES = ["profil","stock","armoire","materiel","missions","journal","admin"];
+const PAGES = ["profil","groupe","stock","armoire","materiel","missions","journal","admin"];
 function pageDeLOnglet(compte){
   try{
     const [qui, page] = (sessionStorage.getItem(CLE_PAGE) || "").split("|");
@@ -520,6 +614,23 @@ function oublierPage(){
    - refusée (422) : son message est affiché tel quel, rien n'a changé ;
    - injoignable : on le signale et on laisse le sondage rétablir l'affichage.
 */
+/* Les données propres au compte, jointes à chaque réponse du serveur. Renvoie vrai si
+   l'une d'elles a changé, pour que l'appelant redessine. */
+function appliquerEnveloppe(d){
+  const avant = JSON.stringify([S.dotations, S.pret, S.plancherMissions, S.gestionMissions,
+                                S.annuaire, S.moi, S.comptesRoles, S.groupes]);
+  if(d.dotations) S.dotations = d.dotations;
+  if(d.pret) S.pret = d.pret;
+  if(d.plancherMissions) S.plancherMissions = d.plancherMissions;
+  if(d.gestionMissions) S.gestionMissions = d.gestionMissions;
+  if(d.annuaire) S.annuaire = d.annuaire;
+  if(d.moi) S.moi = d.moi;
+  if(d.comptesRoles) S.comptesRoles = d.comptesRoles;
+  if(d.groupes) S.groupes = d.groupes;
+  return avant !== JSON.stringify([S.dotations, S.pret, S.plancherMissions, S.gestionMissions,
+                                   S.annuaire, S.moi, S.comptesRoles, S.groupes]);
+}
+
 async function agir(nom, params){
   if(enCours) return false;                 // évite le double-clic
   enCours = true;
@@ -542,14 +653,11 @@ async function agir(nom, params){
     }
     if(!res.ok) throw new Error("HTTP "+res.status);
     version = d.version;
+    if(d.secret) S.motDePasseProvisoire = {compte:(params||{}).compte, valeur:d.secret};
     if(d.user) OPERATOR = d.user;
     if(d.admin!==undefined) ADMIN = !!d.admin;
     if(d.comptes) COMPTES = d.comptes;
-    if(d.dotations) S.dotations = d.dotations;
-    if(d.pret) S.pret = d.pret;
-    if(d.plancherMissions) S.plancherMissions = d.plancherMissions;
-    if(d.gestionMissions) S.gestionMissions = d.gestionMissions;
-    if(d.annuaire) S.annuaire = d.annuaire;
+    appliquerEnveloppe(d);
     if(d.delta) appliquerDelta(d.delta); else await rechargerTout();
     online = true;
     return true;
@@ -639,11 +747,9 @@ async function pull(){
     if(d.user && d.user !== OPERATOR){ OPERATOR = d.user; render(); }
     if(d.admin!==undefined && !!d.admin !== ADMIN){ ADMIN = !!d.admin; render(); }
     if(d.comptes) COMPTES = d.comptes;
-    if(d.dotations) S.dotations = d.dotations;
-    if(d.pret) S.pret = d.pret;
-    if(d.plancherMissions) S.plancherMissions = d.plancherMissions;
-    if(d.gestionMissions) S.gestionMissions = d.gestionMissions;
-    if(d.annuaire) S.annuaire = d.annuaire;
+    // Ce qui est propre au compte (rôle, groupe, sacs, prêts…) change sans que le
+    // stock change : sans ce redessin, « Mon groupe » n'apparaissait qu'au prochain clic.
+    if(appliquerEnveloppe(d) && !d.changed) render();
     if(d.changed) adopt(d);
   }catch(e){
     console.warn("[sync] lecture échouée :", e);
@@ -1220,43 +1326,287 @@ function possessionsDe(compte){
 
 const GENRE_BADGE = { "dotation":"ok", "matériel":"warn", "téléphone":"info", "réservation":"mut" };
 
-function carteCompte(compte, lignes){
-  const dotations = lignes.filter(l=>l.genre==="dotation");
-  const possessions = lignes.filter(l=>l.genre!=="dotation");
+/* Un compte vu par l'administrateur : une vignette dans la grille, et — au clic —
+   une fiche qui rassemble tout ce qu'on peut faire concernant cette personne.
+   Le serveur reste seul juge : la fiche ne fait que proposer les actions, et
+   chacune est réservée aux administrateurs côté serveur. */
+function initialesDe(compte){
+  return compte.split(/[\s._-]+/).map(p=>p[0]||"").join("").slice(0,2).toUpperCase();
+}
+/* Une couleur stable par compte : la même personne garde la même vignette. */
+function couleurDe(compte){
+  let h = 0;
+  for(const ch of compte) h = (h*31 + ch.charCodeAt(0)) % 360;
+  return h;
+}
+function avatar(compte, taille){
+  const t = taille || 54;
+  return `<span style="width:${t}px;height:${t}px;flex:none;border-radius:50%;background:hsl(${couleurDe(compte)} 42% 36%);border:2px solid hsl(${couleurDe(compte)} 42% 50%);display:grid;place-items:center;font:600 ${Math.round(t*.36)}px/1 Archivo,sans-serif;color:#fff;letter-spacing:.02em">${esc(initialesDe(compte))}</span>`;
+}
+function badgeRole(r){
+  if(!r) return `<span class="badge mut">SANS COMPTE</span>`;
+  if(r.role==="admin") return `<span class="badge info">ADMIN</span>`;
+  if(r.role==="chef de groupe") return `<span class="badge violet">CHEF DE GROUPE</span>`;
+  return `<span class="badge mut">EFFECTIF</span>`;
+}
+
+function nomGroupe(id){
+  const g = (S.groupes||[]).find(x=>x.id===id);
+  return g ? g.nom : "";
+}
+
+function vignetteCompte(compte, lignes){
+  const r = (S.comptesRoles||{})[compte];
   const total = lignes.reduce((n,l)=>n+l.qty, 0);
-  /* Trois lignes, et l'identite a la sienne.
-     Elle etait auparavant collee au libelle sur la meme ligne, donc coupee par
-     l'ellipse des que le nom de l'article etait un peu long : « etiquette
-     PC-003 · serie 8KJ2NS5 » disparaissait precisement quand on en avait
-     besoin. La meme information existe deja sur sa propre ligne dans la table
-     du materiel ; c'est coherent de l'y mettre aussi. */
-  const listeHtml = liste => liste.length ? `<div class="stack" style="border-radius:8px">${liste.map(l=>`
-        <div style="padding:8px 11px;display:flex;align-items:center;gap:10px">
-          <span class="badge ${GENRE_BADGE[l.genre]||"mut"}" style="flex:none">${esc(l.genre.toUpperCase())}</span>
-          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
-            <span style="font:500 11.5px/1.2 Archivo,sans-serif;color:var(--c-eef0f4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.libelle)}</span>
-            ${l.detail?`<span style="font:400 10.5px/1.25 Archivo,sans-serif;color:${l.manquant?"var(--c-ef8b83)":"var(--c-9aa2af)"};overflow-wrap:anywhere">${esc(l.detail)}</span>`:""}
-            <span style="font:400 10px/1.2 Archivo,sans-serif;color:var(--c-6d7480);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(l.contexte)} · ${esc(depuisQuand(l.iso))}${l.iso?" ("+esc(dateCourte(l.iso))+")":""}</span>
-          </span>
-          <span style="flex:none;font:600 11px/1 Archivo,sans-serif;color:var(--c-f0b45a);font-variant-numeric:tabular-nums">${l.qty} u.</span>
-        </div>`).join("")}</div>` : "";
-  const corps = !lignes.length
-    ? '<span style="font:400 11.5px/1.4 Archivo,sans-serif;color:var(--c-6d7480)">Rien en sa possession.</span>'
-    : `${dotations.length?`<div class="field" style="gap:6px"><span class="klabel">SAC DE DOTATION · ${dotations.length}</span>${listeHtml(dotations)}</div>`:""}
-      ${possessions.length?`<div class="field" style="gap:6px"><span class="klabel">EMPRUNTS ET SORTIES · ${possessions.length}</span>${listeHtml(possessions)}</div>`:""}`;
+  const actif = !r || r.actif;
   return `
-  <div class="card" style="padding:13px 15px;display:flex;flex-direction:column;gap:10px${lignes.length?"":";opacity:.7"}">
-    <div style="display:flex;align-items:center;gap:9px">
-      <span style="width:24px;height:24px;flex:none;border-radius:50%;background:var(--c-1f242c);border:1px solid var(--c-343a45);display:grid;place-items:center;font:600 9.5px/1 Archivo,sans-serif;color:var(--c-9aa2af)">${esc(compte.split(/[\s._-]+/).map(p=>p[0]||"").join("").slice(0,2).toUpperCase())}</span>
-      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:1px">
-        <span style="font:600 12.5px/1.2 Archivo,sans-serif;color:var(--c-f2f4f8);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(compte)}${compte===OPERATOR?'<span style="color:var(--c-6d7480);font-weight:400"> · vous</span>':""}</span>
-        <span style="font:400 10px/1.2 Archivo,sans-serif;color:var(--c-6d7480)">${lignes.length?lignes.length+" ligne"+(lignes.length>1?"s":"")+" · "+total+" unité"+(total>1?"s":""):"aucune possession"}</span>
+  <button class="card" title="Ouvrir la fiche de ${esc(compte)}" ${on(()=>setT({fiche:{compte, rattacher:""}, motDePasseProvisoire:null}))}
+    style="padding:16px 12px 14px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;cursor:pointer;position:relative${actif?"":";opacity:.5"}">
+    ${total?`<span class="badge ${lignes.length>2?"bad":"warn"}" style="position:absolute;top:9px;right:9px" title="Unités détenues">${total}</span>`:""}
+    ${avatar(compte, 54)}
+    <span style="font:600 12.5px/1.2 Archivo,sans-serif;color:var(--c-f2f4f8);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(compte)}${compte===OPERATOR?'<span style="color:var(--c-6d7480);font-weight:400"> · vous</span>':""}</span>
+    ${badgeRole(r)}
+    ${r && r.groupe ? `<span style="font:400 10px/1.2 Archivo,sans-serif;color:var(--c-6d7480);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(nomGroupe(r.groupe))}</span>` : ""}
+    ${actif?"":'<span class="badge bad">DÉSACTIVÉ</span>'}
+  </button>`;
+}
+
+function listeLignes(liste){
+  return liste.length ? `<div class="stack" style="border-radius:8px">${liste.map(l=>`
+    <div style="padding:8px 11px;display:flex;align-items:center;gap:10px">
+      <span class="badge ${GENRE_BADGE[l.genre]||"mut"}" style="flex:none">${esc(l.genre.toUpperCase())}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font:500 11.5px/1.2 Archivo,sans-serif;color:var(--c-eef0f4);overflow-wrap:anywhere">${esc(l.libelle)}</span>
+        ${l.detail?`<span style="font:400 10.5px/1.25 Archivo,sans-serif;color:${l.manquant?"var(--c-ef8b83)":"var(--c-9aa2af)"};overflow-wrap:anywhere">${esc(l.detail)}</span>`:""}
+        <span style="font:400 10px/1.2 Archivo,sans-serif;color:var(--c-6d7480);overflow-wrap:anywhere">${esc(l.contexte)} · ${esc(depuisQuand(l.iso))}${l.iso?" ("+esc(dateCourte(l.iso))+")":""}</span>
       </span>
-      ${lignes.length?`<span class="badge ${lignes.length>2?"bad":"warn"}">${total}</span>`:'<span class="badge ok">À JOUR</span>'}
-      ${ADMIN?`<button class="btn-mini hwhite" ${on(()=>set({page:"profil", profilDe:compte}))}>Profil</button>`:""}
-      ${ADMIN?`<button class="btn-mini hblue" ${on(()=>ouvrirDotation(compte))}>Modifier le sac</button>`:""}
+      <span style="flex:none;font:600 11px/1 Archivo,sans-serif;color:var(--c-f0b45a);font-variant-numeric:tabular-nums">${l.qty} u.</span>
+    </div>`).join("")}</div>` : "";
+}
+
+/* Les missions d'un compte : celles qu'il gère, celles où il est équipier, celles
+   dont il porte du matériel. */
+function missionsDeCompte(compte){
+  const missions = new Map();
+  const note = (nom, role)=>{
+    if(!nom || nom===SANS_MISSION) return;
+    const m = missions.get(nom) || new Set();
+    m.add(role); missions.set(nom, m);
+  };
+  S.missions.forEach(m=>{ if(gestionnairesDe(m.name).includes(compte)) note(m.name, "Gestion"); });
+  S.equipes.forEach(e=>{ if((e.membres||[]).includes(compte)) note(e.mission, "Effectif · "+e.nom); });
+  Object.keys(S.matRes).forEach(id=>(S.matRes[id]||[]).forEach(r=>{
+    if(!r.returned && r.by===compte) note(r.mission, "Emprunts");
+  }));
+  return Array.from(missions.keys()).filter(n=>!missionArchived(n))
+    .map(n=>({nom:n, st:statutMission(n), roles:Array.from(missions.get(n))}))
+    .sort((a,b)=>a.nom.localeCompare(b.nom));
+}
+
+async function basculerEtat(compte, actif){
+  if(!actif && !confirm("Désactiver « "+compte+" » ?\nSa session s'arrête et il ne peut plus se connecter. Son historique, son sac et ses emprunts restent.")) return;
+  await agir("compte.etat", {compte, actif});
+}
+async function reinitialiserMotDePasse(compte){
+  if(!confirm("Réinitialiser le mot de passe de « "+compte+" » ?\nUn mot de passe provisoire sera affiché une seule fois, et ses sessions ouvertes se fermeront.")) return;
+  await agir("compte.mot_de_passe", {compte});
+}
+
+/* Un groupe vu par l'administrateur : on le crée sans chef, on y place des membres,
+   on nomme un chef quand on le souhaite. Chaque réglage part tout de suite. */
+function ficheGroupe(f){
+  const g = f.id === null ? null : (S.groupes||[]).find(x=>x.id===f.id);
+  const sel = "padding:6px 8px;font-size:12px;width:auto";
+  const fermer = ()=>setT({groupeEdit:null});
+  const entete = titre=>`
+    <div class="modal-head"><span class="modal-title">${esc(titre)}</span>
+      <span class="modal-sub">Un groupe existe avec ou sans chef ; sans chef, seuls les administrateurs le gèrent.</span></div>`;
+  const materiel = (valeur, fn)=>`
+    <select class="inp" data-k="gr-materiel" style="${sel}" ${ong(fn)}>
+      <option value=""${valeur?"":" selected"}>— aucun</option>
+      ${["1","2","3"].map(n=>`<option value="${n}"${valeur===n?" selected":""}>Groupe ${n}</option>`).join("")}
+    </select>`;
+
+  if(f.id === null){
+    return `
+    <div class="modal-back" ${on(e=>{ if(e.target.classList.contains("modal-back")) fermer(); })}>
+      <div class="modal" style="width:480px">
+        ${entete("Nouveau groupe")}
+        <div class="modal-body" style="gap:14px;padding:20px 24px">
+          <label class="field"><span class="klabel">NOM</span>
+            <input class="inp" data-k="gr-nom" placeholder="Ex. Équipe terrain" value="${esc(f.nom)}" ${oni(e=>{ f.nom = e.target.value; })}></label>
+          <label class="field"><span class="klabel">MATÉRIEL AFFECTÉ AU GROUPE</span>
+            ${materiel(f.materiel, e=>{ f.materiel = e.target.value; })}</label>
+          <span style="font:400 11px/1.4 Archivo,sans-serif;color:var(--c-6d7480)">Vous ajouterez ensuite les membres, et un chef si vous le souhaitez.</span>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-sec" ${on(fermer)}>Annuler</button>
+          <button class="btn-pri" ${on(async ()=>{
+            if(!(f.nom||"").trim()){ syncNote("Donnez un nom au groupe."); return; }
+            if(await agir("groupe.creer",{nom:f.nom.trim(), materiel:f.materiel||""})){
+              const cree = (S.groupes||[]).find(x=>x.nom===f.nom.trim());
+              setT({groupeEdit: cree ? {id:cree.id} : null});
+            }
+          })}>Créer le groupe</button>
+        </div>
+      </div>
+    </div>`;
+  }
+  if(!g) return "";
+
+  const libres = Object.keys(S.comptesRoles||{}).filter(c=>{
+    const x = S.comptesRoles[c]; return x.role!=="admin" && x.actif && !x.groupe; }).sort();
+  const ligne = c=>{
+    const chef = c === g.chef;
+    return `<div style="padding:8px 12px;display:flex;align-items:center;gap:10px">
+      ${avatar(c, 28)}
+      <span style="flex:1;min-width:0;font:500 12px Archivo,sans-serif;color:var(--c-eef0f4)">${esc(c)}</span>
+      ${chef ? '<span class="badge violet">CHEF</span>' : `<button class="btn-mini hblue" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:c}))}>Nommer chef</button>`}
+      <button class="btn-mini hwhite" ${on(()=>setT({groupeEdit:null, fiche:{compte:c, rattacher:""}}))}>Fiche</button>
+      <button class="btn-mini hred" ${on(()=>agir("groupe.membre",{compte:c, groupe:""}))}>Retirer</button>
+    </div>`;
+  };
+  return `
+  <div class="modal-back" ${on(e=>{ if(e.target.classList.contains("modal-back")) fermer(); })}>
+    <div class="modal" style="width:640px;max-height:90vh">
+      ${entete("Groupe « "+g.nom+" »")}
+      <div class="modal-body" style="gap:16px;padding:20px 24px;overflow:auto">
+        <label class="field"><span class="klabel">NOM</span>
+          <input class="inp" data-k="gr-nom-${g.id}" value="${esc(g.nom)}" ${ong(e=>agir("groupe.modifier",{groupe:g.id, nom:e.target.value}))}></label>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <label class="field"><span class="klabel">MATÉRIEL AFFECTÉ</span>
+            ${materiel(g.materiel, e=>agir("groupe.modifier",{groupe:g.id, materiel:e.target.value}))}</label>
+          <label class="field"><span class="klabel">CHEF DE GROUPE</span>
+            <select class="inp" data-k="gr-chef" style="${sel}" ${ong(e=>agir("groupe.modifier",{groupe:g.id, chef:e.target.value}))}>
+              <option value=""${g.chef?"":" selected"}>— sans chef</option>
+              ${[...new Set([...g.membres, ...libres])].sort().map(c=>`<option value="${esc(c)}"${g.chef===c?" selected":""}>${esc(c)}${g.membres.includes(c)?"":" (ajouté au groupe)"}</option>`).join("")}
+            </select></label>
+        </div>
+        <div class="field" style="gap:7px"><span class="klabel">MEMBRES · ${g.membres.length}</span>
+          ${g.membres.length ? `<div class="stack" style="border-radius:8px">${g.membres.map(ligne).join("")}</div>`
+            : '<span style="font:400 11.5px Archivo,sans-serif;color:var(--c-6d7480)">Aucun membre pour l\'instant.</span>'}
+          ${libres.length ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <select class="inp" data-k="gr-ajout" style="${sel}" ${ong(e=>{ f.ajout = e.target.value; })}>
+              <option value="">— ajouter un compte sans groupe…</option>
+              ${libres.map(c=>`<option value="${esc(c)}"${f.ajout===c?" selected":""}>${esc(c)}</option>`).join("")}
+            </select>
+            <button class="btn-mini hblue" ${on(()=>{ if(f.ajout){ const c=f.ajout; f.ajout=""; agir("groupe.membre",{compte:c, groupe:g.id}); } })}>Ajouter</button>
+          </div>` : '<span style="font:400 11px Archivo,sans-serif;color:var(--c-6d7480)">Tous les comptes ont déjà un groupe.</span>'}
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-mini hred" style="margin-right:auto" ${on(async ()=>{
+          if(confirm("Supprimer le groupe « "+g.nom+" » ?\nSes "+g.membres.length+" membre(s) n'auront plus de groupe ; rien d'autre n'est supprimé.")){
+            if(await agir("groupe.supprimer",{groupe:g.id})) setT({groupeEdit:null}); } })}>Supprimer le groupe</button>
+        <button class="btn-sec" ${on(fermer)}>Fermer</button>
+      </div>
     </div>
-    ${corps}
+  </div>`;
+}
+
+function ficheCompte(f){
+  const compte = f.compte;
+  const r = (S.comptesRoles||{})[compte];           // absent : nom présent dans des emprunts, sans compte
+  const lignes = possessionsDe(compte);
+  const dotations = lignes.filter(l=>l.genre==="dotation");
+  const detenus = lignes.filter(l=>l.genre!=="dotation");
+  const missions = missionsDeCompte(compte);
+  const soi = compte === OPERATOR;
+  const bloc = (titre, contenu)=>`
+    <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0">
+      <span class="klabel">${titre}</span>${contenu}
+    </div>`;
+  const ligne = (libelle, valeur)=>`<div style="display:flex;justify-content:space-between;gap:12px;font:400 11.5px/1.4 Archivo,sans-serif"><span style="color:var(--c-6d7480)">${libelle}</span><span style="color:var(--c-eef0f4);text-align:right">${valeur}</span></div>`;
+  const vide = t=>`<span style="font:400 11.5px/1.4 Archivo,sans-serif;color:var(--c-6d7480)">${t}</span>`;
+  const sel = "padding:5px 7px;font-size:11px;width:auto";
+
+  /* Identité et état */
+  const identite = bloc("IDENTITÉ ET ÉTAT", `
+    ${ligne("Compte", esc(compte))}
+    ${ligne("Rôle", esc(r ? LIBELLE_ROLE[r.role] : "Aucun compte"))}
+    ${r ? ligne("État", r.actif ? '<span class="badge ok">ACTIF</span>' : '<span class="badge bad">DÉSACTIVÉ</span>') : ""}
+    ${r ? ligne("Dernière visite", r.visite ? esc(depuisQuand(r.visite)) + " ("+esc(dateCourte(r.visite))+")" : "jamais connecté") : ""}
+    ${!r ? vide("Ce nom figure dans des emprunts mais n'a pas (ou plus) de compte : créez-le dans l'administration Django pour le gérer ici.") : ""}`);
+
+  /* Rôle et groupe */
+  let role = "";
+  if(r && r.role==="admin"){
+    role = bloc("RÔLE ET GROUPE", `${vide("Administrateur : tous les droits, sur toutes les missions. Ce rôle se règle dans l'administration Django (/admin/).")}`);
+  }else if(r){
+    const g = (S.groupes||[]).find(x=>x.id===r.groupe) || null;
+    const chef = r.role==="chef de groupe";
+    role = bloc("RÔLE ET GROUPE", `
+      <label class="field" style="gap:5px"><span class="klabel" style="opacity:.8">GROUPE</span>
+        <select class="inp" data-k="fr-groupe" style="${sel}" ${ong(e=>agir("groupe.membre",{compte, groupe:e.target.value}))}>
+          <option value=""${g?"":" selected"}>— aucun groupe</option>
+          ${(S.groupes||[]).map(x=>`<option value="${x.id}"${g&&g.id===x.id?" selected":""}>${esc(x.nom)}</option>`).join("")}
+        </select></label>
+      ${g ? `
+        <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+          ${chef ? `<span class="badge violet">CHEF DE « ${esc(g.nom.toUpperCase())} »</span>
+            <button class="btn-mini hwhite" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:""}))}>Retirer la direction</button>`
+          : `<span class="badge mut">EFFECTIF</span>
+            <button class="btn-mini hblue" title="${g.chef?"Remplace "+esc(g.chef)+" (qui reste membre)":"Ce groupe n'a pas de chef"}" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:compte}))}>Nommer chef du groupe</button>`}
+          <button class="btn-mini hwhite" ${on(()=>setT({groupeEdit:{id:g.id}}))}>Ouvrir le groupe</button>
+        </div>
+        ${!chef && !g.chef ? vide("Ce groupe n'a pas de chef : seuls les administrateurs le gèrent.") : ""}`
+      : vide("Sans groupe, la personne n'a pas de page « Mon groupe » et aucun chef.")}`);
+  }
+
+  /* Sécurité */
+  const prov = S.motDePasseProvisoire && S.motDePasseProvisoire.compte===compte ? S.motDePasseProvisoire.valeur : "";
+  const securite = r ? bloc("SÉCURITÉ ET ACCÈS", `
+    ${prov ? `<div style="padding:10px 12px;border-radius:8px;background:var(--c-1f242c);border:1px solid var(--c-343a45);display:flex;flex-direction:column;gap:6px">
+      <span style="font:400 10.5px/1.4 Archivo,sans-serif;color:var(--c-9aa2af)">Mot de passe provisoire — affiché <b>une seule fois</b>, à transmettre de vive voix. ${esc(compte)} devra le remplacer à sa première connexion.</span>
+      <code style="font:600 17px/1.2 monospace;letter-spacing:.06em;color:var(--c-f0b45a);user-select:all">${esc(prov)}</code>
+      <button class="btn-mini hwhite" style="align-self:flex-start" ${on(()=>setT({motDePasseProvisoire:null}))}>Masquer</button>
+    </div>` : ""}
+    ${soi ? vide("C'est votre compte : changez votre mot de passe depuis vos réglages, et vous ne pouvez pas vous désactiver.") : `
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn-mini hwhite" ${on(()=>reinitialiserMotDePasse(compte))}>Réinitialiser le mot de passe</button>
+      <button class="btn-mini hwhite" title="Le code cesse de fonctionner ; la personne en génère un nouveau dans ses réglages" ${on(()=>agir("compte.recuperation",{compte}))}>Retirer le code de récupération</button>
+      ${r.actif
+        ? `<button class="btn-mini hred" ${on(()=>basculerEtat(compte, false))}>Désactiver le compte</button>`
+        : `<button class="btn-mini hblue" ${on(()=>basculerEtat(compte, true))}>Réactiver le compte</button>`}
+    </div>`}`) : "";
+
+  /* Sac, possessions, missions */
+  const sac = bloc("SAC DE DOTATION · "+dotations.length, `
+    ${dotations.length ? listeLignes(dotations) : vide("Aucun matériel attribué.")}
+    ${r && r.actif ? `<button class="btn-mini hblue" style="align-self:flex-start" ${on(()=>ouvrirDotation(compte))}>Modifier le sac</button>` : ""}`);
+  const possede = bloc("EMPRUNTS ET SORTIES · "+detenus.length,
+    detenus.length ? listeLignes(detenus) : vide("Rien en sa possession."));
+  const lesMissions = bloc("MISSIONS · "+missions.length, missions.length
+    ? `<div class="stack" style="border-radius:8px">${missions.map(m=>`
+        <div style="padding:8px 11px;display:flex;align-items:center;gap:9px">
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+            <span style="font:500 11.5px/1.2 Archivo,sans-serif;color:var(--c-eef0f4);overflow-wrap:anywhere">${esc(m.nom)}</span>
+            <span style="font:400 10px/1.2 Archivo,sans-serif;color:var(--c-6d7480)">${esc(m.roles.join(" · "))}</span>
+          </span>
+          <span class="badge ${m.st==="EN COURS"?"ok":m.st==="PRÉVUE"?"info":"mut"}">${esc(m.st)}</span>
+        </div>`).join("")}</div>`
+    : vide("Aucune mission."));
+
+  return `
+  <div class="modal-back" style="padding:24px" ${on(e=>{ if(e.target.classList.contains("modal-back")) setT({fiche:null, motDePasseProvisoire:null}); })}>
+    <div class="modal" style="width:1250px;max-width:100%;height:auto;max-height:90vh;zoom:1.05">
+      <div class="modal-head" style="flex-direction:row;align-items:center;gap:14px">
+        ${avatar(compte, 60)}
+        <span style="display:flex;flex-direction:column;gap:4px;flex:1;min-width:0">
+          <span class="modal-title">${esc(compte)}</span>
+          <span style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">${badgeRole(r)}${r && !r.actif ? '<span class="badge bad">DÉSACTIVÉ</span>' : ""}${soi?'<span class="modal-sub">c\'est vous</span>':""}</span>
+        </span>
+      </div>
+      <div class="modal-body" style="overflow:auto;padding:20px 24px;display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:14px;align-items:start">
+        <div style="display:flex;flex-direction:column;gap:14px;min-width:0">${identite}${role}${securite}</div>
+        <div style="display:flex;flex-direction:column;gap:14px;min-width:0">${sac}${possede}${lesMissions}</div>
+      </div>
+      <div class="modal-foot">
+        ${r && r.actif ? `<button class="btn-sec" ${on(()=>set({fiche:null, motDePasseProvisoire:null, page:"profil", profilDe:compte}))}>Voir son profil</button>` : ""}
+        ${r && r.actif && !soi ? `<button class="btn-sec" ${on(()=>{ AUTEUR = compte; setT({fiche:null, motDePasseProvisoire:null}); })}>Agir en son nom</button>` : ""}
+        <button class="btn-sec" style="margin-left:auto" ${on(()=>setT({fiche:null, motDePasseProvisoire:null}))}>Fermer</button>
+      </div>
+    </div>
   </div>`;
 }
 
@@ -1387,8 +1737,8 @@ async function envoyerDemandePret(){
   if(qty > ligne.disponible){
     syncNote("Le sac de "+f.choix.proprietaire+" ne peut prêter que "+ligne.disponible+"."); return;
   }
-  const forcer = !!f.forcer && (f.mode==="file" ? (ADMIN || (S._mGestion || [OPERATOR]).includes(auteurEffectif()))
-                                                : (f.mission!==SANS_MISSION && peutGererMission(f.mission)));
+  const forcer = !!f.forcer && (peutForcerPour(f.mode==="file" ? "" : f.mission, f.choix.proprietaire)
+    || (f.mode==="file" && (ADMIN || (S._mGestion || [OPERATOR]).includes(OPERATOR))));
   if(f.mode === "file"){
     // Mission pas encore créée : la demande part avec elle (voir « Créer »).
     setT({_mDemandes:[...S._mDemandes, {proprietaire:f.choix.proprietaire, article:f.choix.article,
@@ -1442,10 +1792,43 @@ function gestionnairesDe(nom){
   const m = S.missions.find(x=>x.name===nom);
   return m && m.owner ? [m.owner] : [];
 }
+/* Les rôles : effectif < chef de groupe < admin, et gestionnaire d'une mission,
+   propre à chaque mission. Même règles que `stock/services/droits.py` — qui est
+   le seul à faire foi : ici on grise les boutons, le serveur refuse. Les droits se
+   jugent sur la personne connectée (`OPERATOR`), pas sur le compte au nom duquel
+   elle agit. */
+const LIBELLE_ROLE = {"admin":"Administrateur", "chef de groupe":"Chef de groupe", "effectif":"Effectif"};
+function roleMoi(){ return (S.moi && S.moi.role) || (ADMIN ? "admin" : "effectif"); }
+function estChefDeGroupe(){ return roleMoi() === "chef de groupe"; }
+function effectifsDuGroupe(){ return (S.moi && S.moi.effectifs) || []; }
+function peutCreerMission(){ return !!(ADMIN || estChefDeGroupe()); }
 function peutGererMission(nom){
-  return !!(ADMIN || gestionnairesDe(nom).includes(auteurEffectif()));
+  return !!(ADMIN || gestionnairesDe(nom).includes(OPERATOR));
 }
 function peutReculerMission(nom){ return peutGererMission(nom); }
+/* Emprunter pour une mission : en faire partie, la gérer, ou être chef d'un groupe
+   dont un effectif en fait partie. Sans mission, c'est libre. */
+function peutEmprunterPour(nom){
+  if(!nom || nom === SANS_MISSION) return true;
+  if(peutGererMission(nom)) return true;
+  const equipiers = membresMission(nom);
+  if(equipiers.has(OPERATOR) || equipiers.has(auteurEffectif())) return true;
+  return estChefDeGroupe() && effectifsDuGroupe().some(c=>equipiers.has(c));
+}
+function missionNamesEmpruntables(){ return missionNames().filter(n=>peutEmprunterPour(n)); }
+/* Rendre une ligne : son emprunteur, le gestionnaire de sa mission, celui dont le
+   sac l'a prêtée, le chef de l'emprunteur, ou un administrateur. */
+function peutRendreLigne(r){
+  if(ADMIN || r.by === OPERATOR || r.sacDe === OPERATOR) return true;
+  if(r.mission && r.mission !== SANS_MISSION && gestionnairesDe(r.mission).includes(OPERATOR)) return true;
+  return estChefDeGroupe() && effectifsDuGroupe().includes(r.by);
+}
+/* Forcer un prêt : le gestionnaire de la mission, ou un chef de groupe pour le sac
+   d'un effectif de son groupe. */
+function peutForcerPour(mission, proprietaire){
+  if(mission && mission !== SANS_MISSION && peutGererMission(mission)) return true;
+  return estChefDeGroupe() && effectifsDuGroupe().includes(proprietaire);
+}
 function changementStatutPermis(actuel, voulu, reculer){
   if(voulu === actuel) return true;
   if(actuel === "ANNULÉE") return reculer;
@@ -1473,19 +1856,28 @@ const WIDGETS = {
   etat_stock:    {titre:"État du stock", taille:"l", desc:"Appareils en armoire, références, articles de matériel."},
   acces_rapides: {titre:"Accès rapides", taille:"s", desc:"Des raccourcis vers les pages de l'application."},
   prets:         {titre:"Mes prêts", taille:"s", perso:true, desc:"Le matériel de votre sac que d'autres ont emprunté, et à qui."},
+  groupe:        {titre:"Mon groupe", taille:"s", perso:true, chef:true, desc:"Vos effectifs : ce qu'ils détiennent, leurs demandes en attente, leurs sacs."},
   demandes:      {titre:"Mes demandes", taille:"s", perso:true, desc:"Vos demandes de matériel personnel, et la réponse qu'elles ont reçue."},
 };
 const DISPOSITION_DEFAUT = ["compteurs","a_recommander","prets","demandes","sac","sorties","missions","activite"];
 
 function dispositionDefaut(){
-  return DISPOSITION_DEFAUT.map(id=>({id, taille:WIDGETS[id].taille}));
+  // Un chef de groupe trouve d'emblée son groupe, juste après les compteurs.
+  const ids = estChefDeGroupe()
+    ? [...DISPOSITION_DEFAUT.slice(0, 2), "groupe", ...DISPOSITION_DEFAUT.slice(2)]
+    : DISPOSITION_DEFAUT;
+  return ids.map(id=>({id, taille:WIDGETS[id].taille}));
+}
+function widgetDisponible(id){
+  const w = WIDGETS[id];
+  return !!w && (!w.admin || ADMIN) && (!w.chef || estChefDeGroupe());
 }
 /* La disposition du compte, ou celle par défaut. Un widget réservé aux
    administrateurs n'apparaît pas aux autres, même s'il figurait dans une
    disposition enregistrée. */
 function dispositionProfil(){
   const brut = Array.isArray(S.profilWidgets) ? S.profilWidgets : dispositionDefaut();
-  return brut.filter(w=>w && WIDGETS[w.id] && (!WIDGETS[w.id].admin || ADMIN))
+  return brut.filter(w=>w && widgetDisponible(w.id))
              .map(w=>({id:w.id, taille:w.taille==="l" ? "l" : "s"}));
 }
 function enregistrerDisposition(liste){ set({profilWidgets:liste}); }
@@ -1518,6 +1910,187 @@ function widgetAjouter(id){
   const l = dispositionProfil();
   if(!l.some(w=>w.id===id)) l.push({id, taille:WIDGETS[id].taille});
   enregistrerDisposition(l);
+}
+
+/* « Mon groupe » : les membres du groupe de la personne connectée, ce que chacun
+   détient, et le matériel que le stock affecte au groupe. Ouvert à tous les membres,
+   en lecture : le serveur n'envoie que les sacs du groupe, et seuls le chef et les
+   administrateurs peuvent les modifier. */
+function groupeMoi(){ return (S.moi && S.moi.groupe) || null; }
+
+function pageGroupe(){
+  const g = groupeMoi();
+  if(!g) return `<div style="padding:22px 26px"><div class="card" style="padding:34px 16px;text-align:center;color:var(--c-6d7480);font:400 12px Archivo,sans-serif">Vous ne faites partie d'aucun groupe. Un administrateur vous rattache à un chef de groupe.</div></div>`;
+
+  const membres = g.membres.map(c=>{
+    const lignes = possessionsDe(c);
+    return {compte:c, lignes, unites:lignes.reduce((n,l)=>n+l.qty, 0), chef:c===g.chef};
+  }).sort((a,b)=>(b.chef - a.chef) || a.compte.localeCompare(b.compte, "fr"));
+
+  // Les membres : des vignettes, comme dans l'administration des comptes. Le contenu du
+  // sac s'ouvre au clic.
+  const carte = m=>`
+    <button class="card" title="Voir le contenu du sac de ${esc(m.compte)}" ${on(()=>setT({sacMembre:m.compte}))}
+      style="padding:16px 12px 14px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;cursor:pointer;position:relative">
+      ${m.unites?`<span class="badge warn" style="position:absolute;top:9px;right:9px" title="Unités détenues">${m.unites}</span>`:""}
+      ${avatar(m.compte, 54)}
+      <span style="font:600 12.5px/1.2 Archivo,sans-serif;color:var(--c-f2f4f8);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.compte)}${m.compte===OPERATOR?'<span style="color:var(--c-6d7480);font-weight:400"> · vous</span>':""}</span>
+      ${m.chef ? '<span class="badge violet">CHEF DE GROUPE</span>' : '<span class="badge mut">EFFECTIF</span>'}
+    </button>`;
+
+  /* Les missions en cours qui impliquent au moins un membre du groupe : il la gère,
+     fait partie d'une de ses équipes, ou porte du matériel emprunté pour elle. */
+  const impliques = new Map();                       // mission -> { compte -> rôles }
+  g.membres.forEach(c=>missionsDeCompte(c).forEach(m=>{
+    if(m.st !== "EN COURS") return;
+    const parMembre = impliques.get(m.nom) || new Map();
+    parMembre.set(c, m.roles);
+    impliques.set(m.nom, parMembre);
+  }));
+  const missionsEnCours = Array.from(impliques.entries())
+    .map(([nom, parMembre])=>({nom, parMembre, date:(S.missions.find(x=>x.name===nom)||{}).date||""}))
+    .sort((a,b)=>a.nom.localeCompare(b.nom, "fr"));
+  const carteMission = m=>`
+    <div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:10px;min-width:0">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
+          <a href="${esc(adresseMission(m.nom))}" target="_blank" rel="noopener" title="Ouvrir le tableau de la mission"
+             style="font:600 13px/1.25 Archivo,sans-serif;color:var(--c-f2f4f8);overflow-wrap:anywhere;text-decoration:none;border-bottom:1px dashed var(--c-6d7480);align-self:flex-start">${esc(m.nom)}</a>
+          <span style="font:400 10.5px Archivo,sans-serif;color:var(--c-6d7480)">${m.date?"Depuis le "+esc(dateCourte(m.date)):"Sans date"} · ${m.parMembre.size} membre${m.parMembre.size>1?"s":""} du groupe</span>
+        </span>
+        <span class="badge ok">EN COURS</span>
+      </div>
+      <div class="stack" style="border-radius:8px">${Array.from(m.parMembre.entries()).map(([c, roles])=>`
+        <div style="padding:7px 11px;display:flex;align-items:center;gap:9px">
+          ${avatar(c, 24)}
+          <span style="font:500 12px Archivo,sans-serif;color:var(--c-eef0f4)">${esc(c)}${c===OPERATOR?'<span style="color:var(--c-6d7480);font-weight:400"> · vous</span>':""}</span>
+          <span style="margin-left:auto;font:400 10.5px Archivo,sans-serif;color:var(--c-9aa2af);text-align:right">${esc(roles.join(" · "))}</span>
+        </div>`).join("")}</div>
+    </div>`;
+
+  /* Ce qui traîne : sorti ou prêté à un membre depuis plus de 7 jours (même seuil que le
+     widget « Détenu depuis longtemps » du profil). Le plus ancien en tête : c'est
+     l'ordre dans lequel on relance. */
+  const longtemps = [];
+  membres.forEach(m=>m.lignes.forEach(l=>{
+    if(l.genre==="dotation" || l.genre==="réservation") return;
+    const d = quand(l.iso);
+    if(d && (Date.now() - d.getTime()) >= 7*86400000) longtemps.push(Object.assign({compte:m.compte}, l));
+  }));
+  longtemps.sort((a,b)=>String(a.iso).localeCompare(String(b.iso)));
+  const ligneLongtemps = l=>`
+    <div style="padding:9px 14px;display:flex;align-items:center;gap:11px">
+      ${avatar(l.compte, 28)}
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+        <span style="font:500 12px/1.25 Archivo,sans-serif;color:var(--c-eef0f4);overflow-wrap:anywhere">${esc(l.libelle)}${l.detail?`<span style="color:var(--c-9aa2af);font-weight:400"> · ${esc(l.detail)}</span>`:""}</span>
+        <span style="font:400 10.5px/1.3 Archivo,sans-serif;color:var(--c-6d7480);overflow-wrap:anywhere">${esc(l.compte)}${l.contexte?" · "+esc(l.contexte):""}</span>
+      </span>
+      <span class="badge bad" title="Sorti le ${esc(dateCourte(l.iso))}">${esc(depuisQuand(l.iso).replace(/^depuis /, "").toUpperCase())}</span>
+      <span style="flex:none;font:600 11.5px Archivo,sans-serif;color:var(--c-f0b45a);font-variant-numeric:tabular-nums">${l.qty} u.</span>
+    </div>`;
+
+  // Le matériel du groupe : les articles que le stock affecte à « Groupe n ».
+  const etiquette = g.affectation;
+  const articles = etiquette ? S.materiel.filter(m=>m.affectation===etiquette)
+    .sort((a,b)=>a.name.localeCompare(b.name, "fr")) : [];
+  const colonnes = "grid-template-columns:minmax(0,1.4fr) minmax(90px,.7fr) 64px minmax(0,1.6fr);column-gap:20px";
+  const ligneArticle = m=>{
+    const id = m.id || m.name;
+    const sortis = (S.matRes[id]||[]).filter(r=>!r.returned);
+    const identite = exemplaireDetail(m);
+    return `
+    <div style="padding:9px 14px;display:grid;${colonnes};gap:12px;align-items:center;border-bottom:1px solid var(--c-1f232a)">
+      <span style="display:flex;flex-direction:column;gap:2px;min-width:0">
+        <span style="font:600 12.5px/1.25 Archivo,sans-serif;color:var(--c-eef0f4);overflow-wrap:anywhere">${esc(m.name)}</span>
+        ${identite?`<span style="font:400 10px/1.2 Archivo,sans-serif;color:var(--c-6d7480)">${esc(identite)}</span>`:""}
+      </span>
+      <span style="font:400 12px Archivo,sans-serif;color:var(--c-aeb5c1)">${esc(m.cat)}</span>
+      <span style="font:600 13px Archivo,sans-serif;color:var(--c-f2f4f8);text-align:right;font-variant-numeric:tabular-nums" title="En stock">${m.qty}</span>
+      <span style="font:400 11px/1.35 Archivo,sans-serif;color:var(--c-9aa2af)">${sortis.length
+        ? sortis.map(r=>esc(r.by)+" × "+r.qty+(r.mission&&r.mission!==SANS_MISSION?" · "+esc(r.mission):"")).join("<br>")
+        : '<span style="color:var(--c-6d7480)">—</span>'}</span>
+    </div>`;
+  };
+  const vide = t=>`<div style="padding:22px 16px;color:var(--c-6d7480);font:400 12px/1.5 Archivo,sans-serif">${t}</div>`;
+  const materiel = !etiquette
+    ? vide("Aucune affectation de matériel n'est définie pour ce groupe : un administrateur la règle sur la fiche du chef de groupe (Administration → Comptes).")
+    : articles.length
+      ? `<div style="display:grid;${colonnes};gap:12px;padding:8px 14px;border-bottom:1px solid var(--c-23262d)">
+          <span class="klabel">ARTICLE</span><span class="klabel">CATÉGORIE</span><span class="klabel" style="text-align:right">STOCK</span><span class="klabel">SORTI PAR</span></div>${articles.map(ligneArticle).join("")}`
+      : vide("Aucun article du stock n'est affecté à « "+esc(etiquette)+" ».");
+
+  return `
+  <div style="flex:1;min-height:0;padding:22px 26px 32px;display:flex;flex-direction:column;gap:18px;min-width:0;overflow:auto">
+    ${g.chef ? "" : `<div class="card" style="padding:11px 14px;font:400 11.5px/1.4 Archivo,sans-serif;color:var(--c-9aa2af)">Ce groupe n'a pas de chef pour l'instant : un administrateur le gère.</div>`}
+    <div class="field" style="gap:8px"><span class="klabel">MEMBRES · ${membres.length}</span>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;align-items:start">${membres.map(carte).join("")}</div>
+    </div>
+    <div class="field" style="gap:8px"><span class="klabel">MISSIONS EN COURS · ${missionsEnCours.length}</span>
+      ${missionsEnCours.length
+        ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;align-items:start">${missionsEnCours.map(carteMission).join("")}</div>`
+        : `<div class="card" style="padding:18px 16px;color:var(--c-6d7480);font:400 12px Archivo,sans-serif">Aucune mission en cours n'implique le groupe.</div>`}
+    </div>
+    <div class="field" style="gap:8px"><span class="klabel">DÉTENU OU PRÊTÉ DEPUIS PLUS DE 7 JOURS · ${longtemps.length}</span>
+      <div class="card" style="overflow:hidden">${longtemps.length
+        ? `<div class="stack">${longtemps.map(ligneLongtemps).join("")}</div>`
+        : vide("Rien ne traîne : tout ce qui est sorti l'est depuis moins de 7 jours.")}</div>
+    </div>
+    <div class="field" style="gap:8px"><span class="klabel">MATÉRIEL DU GROUPE${etiquette ? " · "+esc(etiquette.toUpperCase()) : ""}</span>
+      <div class="card" style="overflow:hidden">${materiel}</div>
+    </div>
+  </div>`;
+}
+
+/* Le contenu du sac d'un membre du groupe, en lecture : sa dotation, puis ce qu'il a
+   emprunté ou sorti. */
+function fenetreSacMembre(compte){
+  const g = groupeMoi();
+  if(!g || !g.membres.includes(compte)) return "";
+  const lignes = possessionsDe(compte);
+  const dotations = lignes.filter(l=>l.genre==="dotation");
+  // Les plus récents d'abord : ce qui vient de sortir est ce qu'on cherche à voir.
+  const autres = lignes.filter(l=>l.genre!=="dotation")
+    .sort((a,b)=>String(b.iso||"").localeCompare(String(a.iso||"")));
+  // Ce que la personne a rendu récemment : le journal du matériel, les cinq derniers retours.
+  const retours = S.matLog.filter(e=>e.who===compte && e.kind==="RETOUR")
+    .sort((a,b)=>String(b.iso||"").localeCompare(String(a.iso||""))).slice(0, 5);
+  const chef = compte === g.chef;
+  const fermer = ()=>setT({sacMembre:null});
+  const colonne = (titre, liste, vide, bord, suite)=>`
+    <div style="display:flex;flex-direction:column;gap:9px;min-width:0;padding:20px 24px;overflow:auto${bord?";border-left:1px solid var(--c-23262d)":""}">
+      <span class="klabel">${titre} · ${liste.length}</span>
+      ${liste.length ? listeLignes(liste) : '<span style="font:400 11.5px Archivo,sans-serif;color:var(--c-6d7480)">'+vide+'</span>'}
+      ${suite||""}
+    </div>`;
+  const blocRetours = `
+    <span class="klabel" style="margin-top:10px">DERNIERS RETOURS · ${retours.length}</span>
+    ${retours.length ? `<div class="stack" style="border-radius:8px">${retours.map(e=>`
+      <div style="padding:8px 11px;display:flex;align-items:center;gap:9px">
+        <span class="badge ok" style="flex:none">RETOUR</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font:500 12px/1.25 Archivo,sans-serif;color:var(--c-eef0f4);overflow-wrap:anywhere">${esc(e.item)}</span>
+          <span style="font:400 10.5px/1.3 Archivo,sans-serif;color:var(--c-6d7480)">${e.mission&&e.mission!==SANS_MISSION?esc(e.mission)+" · ":""}${esc(depuisQuand(e.iso).replace(/^depuis /, "il y a "))}</span>
+        </span>
+        <span style="flex:none;font:600 11.5px Archivo,sans-serif;color:var(--c-9aa2af)">${e.qty} u.</span>
+      </div>`).join("")}</div>`
+    : '<span style="font:400 11.5px Archivo,sans-serif;color:var(--c-6d7480)">Aucun retour enregistré.</span>'}`;
+  return `
+  <div class="modal-back" ${on(e=>{ if(e.target.classList.contains("modal-back")) fermer(); })}>
+    <div class="modal" style="width:980px;max-height:90vh">
+      <div class="modal-head" style="flex-direction:row;align-items:center;gap:14px">
+        ${avatar(compte, 52)}
+        <span style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:0">
+          <span class="modal-title">${esc(compte)}${compte===OPERATOR?" · vous":""}</span>
+          <span>${chef ? '<span class="badge violet">CHEF DE GROUPE</span>' : '<span class="badge mut">EFFECTIF</span>'}</span>
+        </span>
+      </div>
+      <div class="modal-body" style="padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:hidden;min-height:0">
+        ${colonne("SAC DE DOTATION", dotations, "Aucun matériel attribué.", false)}
+        ${colonne("EMPRUNTS ET SORTIES EN COURS", autres, "Aucun emprunt ni sortie en cours.", true, blocRetours)}
+      </div>
+      <div class="modal-foot"><button class="btn-sec" ${on(fermer)}>Fermer</button></div>
+    </div>
+  </div>`;
 }
 
 /* La page de profil : le tableau de bord d'un compte. Chacun y retrouve ce qui
@@ -1671,6 +2244,19 @@ function pageProfil(){
             +(d.statut==="EN ATTENTE"?` <button class="btn-mini" ${on(()=>agir("pret.annuler",{id:d.id}))}>Annuler</button>`:"")))
         : vide("Aucune demande récente."),
       `<button class="btn-mini hblue" ${on(()=>ouvrirDemandePret("direct"))}>+ Nouvelle demande</button>`),
+    groupe: ()=>{
+      const eff = effectifsDuGroupe();
+      return section("MON GROUPE · "+eff.length,
+        eff.length ? liste(eff, c=>{
+          const lignesC = possessionsDe(c);
+          const unites = lignesC.reduce((n,l)=>n+l.qty, 0);
+          const attente = (S.pret.recuesGroupe||[]).filter(d=>d.pour===c).length;
+          return rangee(esc(c)+(attente?` <span class="badge warn" title="Demandes de prêt en attente pour ${esc(c)}">${attente}</span>`:""),
+            unites+" unité"+(unites>1?"s":"")+" détenue"+(unites>1?"s":"")+" · "+lignesC.length+" ligne"+(lignesC.length>1?"s":""),
+            `<button class="btn-mini hwhite" ${on(()=>set({page:"profil", profilDe:c}))}>Profil</button>
+             <button class="btn-mini hblue" ${on(()=>ouvrirDotation(c))}>Sac</button>`);
+        }) : vide("Aucun effectif n'est rattaché à votre groupe : un administrateur les rattache à votre compte."));
+    },
     acces_rapides: ()=>section("ACCÈS RAPIDES", `<div style="display:flex;flex-wrap:wrap;gap:8px">
       ${[["stock","Stock de téléphone"],["armoire","Plan de l'armoire"],["materiel","Stock de matériel"],["missions","Missions"],["journal","Journal"],
          ...(ADMIN ? [["admin","Administration"]] : [])]
@@ -1701,7 +2287,7 @@ function pageProfil(){
 
   // Les widgets que la personne n'affiche pas, proposés à l'ajout en mode édition.
   const presents = new Set(disposition.map(w=>w.id));
-  const absents = Object.keys(WIDGETS).filter(id=>!presents.has(id) && (!WIDGETS[id].admin || ADMIN));
+  const absents = Object.keys(WIDGETS).filter(id=>!presents.has(id) && widgetDisponible(id));
   const palette = edition ? `
     <div class="card" style="padding:15px 16px;display:flex;flex-direction:column;gap:11px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
@@ -1727,7 +2313,11 @@ function pageProfil(){
       <span style="width:52px;height:52px;flex:none;border-radius:14px;display:grid;place-items:center;background:rgba(42,107,242,.16);border:1px solid rgba(42,107,242,.34);color:var(--c-8fb4ff);font:600 18px/1 Archivo,sans-serif">${esc(String(compte).slice(0,2).toUpperCase())}</span>
       <span style="flex:1;min-width:200px;display:flex;flex-direction:column;gap:5px">
         <span style="font:700 20px/1.2 Archivo,sans-serif;color:var(--c-f2f4f8);letter-spacing:-.01em">${esc(compte)}</span>
-        <span style="font:400 11.5px/1.3 Archivo,sans-serif;color:var(--c-767d8a)">${moi ? (ADMIN ? "Administrateur du stock" : "Utilisateur") : "Profil consulté par un administrateur"}${AUTEUR&&moi?" · vous agissez en son nom":""}</span>
+        <span style="font:400 11.5px/1.3 Archivo,sans-serif;color:var(--c-767d8a)">${moi
+          ? (ADMIN ? "Administrateur du stock"
+             : estChefDeGroupe() ? "Chef de groupe · "+effectifsDuGroupe().length+" effectif"+(effectifsDuGroupe().length>1?"s":"")
+             : "Effectif"+(S.moi && S.moi.chef ? " · groupe de "+S.moi.chef : ""))
+          : (ADMIN ? "Profil consulté par un administrateur" : "Profil d'un effectif de votre groupe")}${AUTEUR&&moi?" · vous agissez en son nom":""}</span>
       </span>
       ${moi && lignes.length ? `<button class="btn-pri" ${on(()=>setT({possessions:true}))}>Rendre du matériel</button>` : ""}
       ${!moi ? `<button class="btn-sec" ${on(()=>set({profilDe:null}))}>← Mon profil</button>` : ""}
@@ -1747,6 +2337,36 @@ function pageProfil(){
               <span style="font:600 12.5px/1.3 Archivo,sans-serif;color:var(--c-f2f4f8)"><b style="color:var(--c-8fb4ff)">${esc(d.de)}</b> vous demande ${d.quantite} × ${esc(d.libelle)}</span>
               ${d.detail?`<span style="font:400 10.5px/1.3 Archivo,sans-serif;color:var(--c-9aa2af)">${esc(d.detail)}</span>`:""}
               <span style="font:400 11px/1.3 Archivo,sans-serif;color:var(--c-9aa2af)">${d.mission&&d.mission!==SANS_MISSION?"Pour la mission « "+esc(d.mission)+" »":"Hors mission"} · ${esc(depuisQuand(d.iso))}${d.disponible<d.quantite?` · <b style="color:var(--c-ef8b83);font-weight:600">il ne reste que ${d.disponible} de disponible</b>`:""}</span>
+              ${d.motif?`<span style="font:400 11.5px/1.35 Archivo,sans-serif;color:var(--c-c3c9d3)">« ${esc(d.motif)} »</span>`:""}
+            </span>
+            ${(S.refusPret && S.refusPret.id===d.id) ? "" : `
+            <span style="display:flex;gap:7px;flex:none">
+              <button class="btn-pri" style="padding:7px 13px" ${d.disponible<d.quantite?"disabled":""} ${on(()=>agir("pret.accepter",{id:d.id}))}>Accepter</button>
+              <button class="btn-sec" style="padding:7px 13px" ${on(()=>setT({refusPret:{id:d.id, raison:""}}))}>Refuser</button>
+            </span>`}
+          </div>
+          ${(S.refusPret && S.refusPret.id===d.id) ? `
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <input class="inp" data-k="refus-${d.id}" style="flex:1;min-width:200px" maxlength="300" placeholder="Raison du refus (facultatif)" value="${esc(S.refusPret.raison)}" ${oni(e=>{S.refusPret.raison=e.target.value;})}>
+            <button class="btn-sec" style="padding:7px 13px" ${on(confirmerRefusPret)}>Confirmer le refus</button>
+            <button class="btn-mini" ${on(()=>setT({refusPret:null}))}>Annuler</button>
+          </div>` : ""}
+        </div>`).join("")}</div>
+    </div>` : ""}
+
+    ${(moi && (S.pret.recuesGroupe||[]).length) ? `
+    <div class="card" style="padding:15px 16px;display:flex;flex-direction:column;gap:11px;border-color:rgba(240,180,90,.5);background:rgba(240,180,90,.06)">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span class="badge warn">${(S.pret.recuesGroupe||[]).length}</span>
+        <span style="font:700 13px/1.2 Archivo,sans-serif;color:var(--c-f2f4f8)">Demande${(S.pret.recuesGroupe||[]).length>1?"s":""} de prêt dans les sacs de votre groupe</span>
+      </div>
+      <div class="stack" style="border-radius:8px">${(S.pret.recuesGroupe||[]).map(d=>`
+        <div style="padding:11px 12px;display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">
+            <span style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:3px">
+              <span style="font:600 12.5px/1.3 Archivo,sans-serif;color:var(--c-f2f4f8)"><b style="color:var(--c-8fb4ff)">${esc(d.de)}</b> demande ${d.quantite} × ${esc(d.libelle)} à <b style="color:var(--c-f0b45a)">${esc(d.pour)}</b></span>
+              ${d.detail?`<span style="font:400 10.5px/1.3 Archivo,sans-serif;color:var(--c-9aa2af)">${esc(d.detail)}</span>`:""}
+              <span style="font:400 11px/1.3 Archivo,sans-serif;color:var(--c-9aa2af)">${d.mission&&d.mission!==SANS_MISSION?"Pour la mission « "+esc(d.mission)+" »":"Hors mission"} · ${esc(depuisQuand(d.iso))}${d.disponible<d.quantite?` · <b style="color:var(--c-ef8b83);font-weight:600">il ne reste que ${d.disponible} de disponible</b>`:""} · vous répondez à la place de ${esc(d.pour)}</span>
               ${d.motif?`<span style="font:400 11.5px/1.35 Archivo,sans-serif;color:var(--c-c3c9d3)">« ${esc(d.motif)} »</span>`:""}
             </span>
             ${(S.refusPret && S.refusPret.id===d.id) ? "" : `
@@ -1787,7 +2407,13 @@ function carteComptesAdmin(){
     });
   });
 
+  // Les comptes désactivés ne sont pas dans COMPTES : on les prend dans les rôles.
+  Object.keys(S.comptesRoles||{}).forEach(c=>{ if(!detenu.has(c)) detenu.set(c, possessionsDe(c)); });
+  const inactif = c => !!(S.comptesRoles||{})[c] && !S.comptesRoles[c].actif;
+
   let comptes = Array.from(detenu.entries());
+  if(!S.adminComptesInactifs) comptes = comptes.filter(([c])=>!inactif(c));
+  if(S.adminComptesRole) comptes = comptes.filter(([c])=>((S.comptesRoles||{})[c]||{}).role===S.adminComptesRole);
   if(S.adminComptesActifs) comptes = comptes.filter(([, l])=>l.length);
   if(q) comptes = comptes.filter(([c, l])=> c.toLowerCase().includes(q)
     || l.some(x=>(x.libelle+" "+x.detail+" "+x.contexte).toLowerCase().includes(q)));
@@ -1809,14 +2435,33 @@ function carteComptesAdmin(){
   <div class="card" style="overflow:hidden;display:${S.adminTab==="comptes"?"block":"none"}">
     <div style="padding:14px 16px;border-bottom:1px solid var(--c-23262d);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
       <div style="display:flex;flex-direction:column;gap:3px">
-        <span style="font:600 13px Archivo,sans-serif;color:var(--c-eef0f4)">Comptes et possessions</span>
+        <span style="font:600 13px Archivo,sans-serif;color:var(--c-eef0f4)">Comptes</span>
         <span style="font:400 11px Archivo,sans-serif;color:var(--c-6d7480)">${detenu.size} compte${detenu.size>1?"s":""} · ${avec} ${avec>1?"détiennent":"détient"} quelque chose · ${unites} unité${unites>1?"s":""} en circulation</span>
       </div>
-      ${chip(S.adminComptesActifs?"Seulement ceux qui détiennent":"Tous les comptes", S.adminComptesActifs, ()=>setT({adminComptesActifs:!S.adminComptesActifs}))}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${chip("Tous", !S.adminComptesRole, ()=>setT({adminComptesRole:""}))}
+        ${chip("Admins", S.adminComptesRole==="admin", ()=>setT({adminComptesRole:"admin"}))}
+        ${chip("Chefs", S.adminComptesRole==="chef de groupe", ()=>setT({adminComptesRole:"chef de groupe"}))}
+        ${chip("Effectifs", S.adminComptesRole==="effectif", ()=>setT({adminComptesRole:"effectif"}))}
+        ${chip(S.adminComptesActifs?"Seulement ceux qui détiennent":"Même sans possession", S.adminComptesActifs, ()=>setT({adminComptesActifs:!S.adminComptesActifs}))}
+        ${chip("Afficher les désactivés", S.adminComptesInactifs, ()=>setT({adminComptesInactifs:!S.adminComptesInactifs}))}
+      </div>
+    </div>
+    <div style="padding:12px 16px;border-bottom:1px solid var(--c-23262d);display:flex;flex-direction:column;gap:9px">
+      <div style="display:flex;align-items:center;gap:9px">
+        <span class="klabel">GROUPES · ${(S.groupes||[]).length}</span>
+        <button class="btn-mini hblue" style="margin-left:auto" ${on(()=>setT({groupeEdit:{id:null, nom:"", materiel:""}}))}>+ Nouveau groupe</button>
+      </div>
+      ${(S.groupes||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:8px">${S.groupes.map(g=>`
+        <button class="btn-sec" style="display:flex;align-items:center;gap:8px;padding:7px 11px" ${on(()=>setT({groupeEdit:{id:g.id}}))}>
+          <b style="font:600 12px Archivo,sans-serif">${esc(g.nom)}</b>
+          <span style="font:400 10.5px Archivo,sans-serif;color:var(--c-6d7480)">${g.membres.length} membre${g.membres.length>1?"s":""} · ${g.chef?"chef "+esc(g.chef):"sans chef"}${g.materiel?" · matériel "+g.materiel:""}</span>
+        </button>`).join("")}</div>`
+      : `<span style="font:400 11.5px Archivo,sans-serif;color:var(--c-6d7480)">Aucun groupe : créez-en un, avec ou sans chef.</span>`}
     </div>
     <div style="padding:12px 16px;border-bottom:1px solid var(--c-23262d)"><input class="inp" data-k="cptq" style="width:100%;font-size:12px" placeholder="Rechercher un compte, un article, une mission…" value="${esc(S.adminCompteQuery)}" ${oni(e=>setT({adminCompteQuery:e.target.value}))}></div>
     ${comptes.length
-      ? `<div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(316px,1fr));gap:12px;align-items:start">${comptes.map(([c, l])=>carteCompte(c, l)).join("")}</div>`
+      ? `<div style="padding:14px 16px;display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;align-items:start">${comptes.map(([c, l])=>vignetteCompte(c, l)).join("")}</div>`
       : `<div style="padding:34px 16px;text-align:center;color:var(--c-6d7480);font:400 12px Archivo,sans-serif">${COMPTES.length?"Aucun compte correspondant.":"Le serveur n'a transmis aucun compte."}</div>`}
   </div>`;
 }
@@ -2329,15 +2974,33 @@ function render(){
   const matchCells = new Set(matchIds.map(id=>place[id]).filter(Boolean).map(p=>p.loc)).size;
 
   /* ---------- sidebar ---------- */
+  // Les icônes de la barre latérale sont des fichiers (static/stock/*.svg), pas du CSS.
+  // Chaque adresse est écrite en toutes lettres : Django résout la balise d'adresse
+  // statique avant que le script ne s'exécute, elle ne peut pas recevoir un nom calculé ici.
+  const ICONES_NAV = {
+    "stock-telephone": "{% static 'stock/stock-telephone.svg' %}",
+    "plan-armoire": "{% static 'stock/plan-armoire.svg' %}",
+    "stock-materiel": "{% static 'stock/stock-materiel.svg' %}",
+    "missions-en-cours": "{% static 'stock/missions-en-cours.svg' %}",
+    "mon-groupe": "{% static 'stock/mon-groupe.svg' %}",
+    "journal": "{% static 'stock/journal.svg' %}",
+    "administration": "{% static 'stock/administration.svg' %}",
+    "mon-profil": "{% static 'stock/mon-profil.svg' %}",
+    "se-deconnecter": "{% static 'stock/se-deconnecter.svg' %}",
+    "demandes-de-pret": "{% static 'stock/demandes-de-pret.svg' %}",
+    "mon-materiel": "{% static 'stock/mon-materiel.svg' %}",
+    "consommables-a-recommander": "{% static 'stock/consommables-a-recommander.svg' %}",
+  };
+  const iconeNav = nom => `<img src="${ICONES_NAV[nom]}" alt="" class="nav-ico">`;
   const navItems = [
-    ["stock","Stock de téléphone",'<span class="nic"></span>'],
-    ["armoire","Plan de l\'armoire",'<span class="nic" style="display:flex;flex-direction:column;justify-content:space-evenly"><i style="display:block;height:1px;background:currentColor"></i><i style="display:block;height:1px;background:currentColor"></i></span>'],
-    ["materiel","Stock de matériel",'<span class="nic" style="display:grid;place-items:center"><i style="width:6px;height:6px;background:currentColor;display:block"></i></span>'],
-    ["missions","Missions en cours",'<span class="nic" style="border-radius:50%;display:grid;place-items:center"><i style="width:5px;height:5px;background:currentColor;border-radius:50%;display:block"></i></span>'],
-    ["journal","Journal",'<span class="nic" style="display:flex;flex-direction:column;justify-content:center;gap:2px;padding:2px"><i style="display:block;height:1px;background:currentColor"></i><i style="display:block;height:1px;background:currentColor"></i><i style="display:block;height:1px;background:currentColor"></i></span>'],
-    ...(ADMIN ? [["admin","Administration",'<span class="nic" style="border-radius:50%;display:grid;place-items:center"><i style="width:5px;height:5px;background:currentColor;border-radius:50%;display:block"></i></span>']] : [])
+    ["stock","Stock de téléphone",iconeNav("stock-telephone")],
+    ["armoire","Plan de l'armoire",iconeNav("plan-armoire")],
+    ["materiel","Stock de matériel",iconeNav("stock-materiel")],
+    ["missions","Missions en cours",iconeNav("missions-en-cours")],
+    ...(groupeMoi() ? [["groupe","Mon groupe",iconeNav("mon-groupe")]] : []),
+    ["journal","Journal",iconeNav("journal")],
+    ...(ADMIN ? [["admin","Administration",iconeNav("administration")]] : [])
   ];
-  const kpiUnits = S.refs.reduce((s,r)=>s+r.qty,0);
 
   /* Encart du compte : en pied de barre latérale, il ne dispute plus la place
      aux boutons d'action de l'en-tête, et « Quitter » n'est plus à un
@@ -2349,30 +3012,34 @@ function render(){
   const nbDemandes = S.pret.recues.length;
   const menuCompte = !S.userMenu ? "" : `
     <div class="user-menu">
+      <div style="padding:7px 9px 8px;border-bottom:1px solid var(--c-23262d);margin-bottom:3px;display:flex;align-items:center;gap:7px">
+        <span class="klabel">RÔLE</span>
+        <span class="badge ${ADMIN?"info":estChefDeGroupe()?"warn":"mut"}">${esc(LIBELLE_ROLE[roleMoi()]||roleMoi()).toUpperCase()}</span>
+      </div>
       <button class="user-item" ${on(()=>set({userMenu:false, page:"profil", profilDe:null}))}>
-        <span class="nic" style="border-radius:50%;display:grid;place-items:center"><i style="width:6px;height:6px;background:currentColor;border-radius:50%;display:block"></i></span>
+        ${iconeNav("mon-profil")}
         <span>Mon profil</span>
       </button>
       <button class="user-item" ${on(()=>setT({userMenu:false, possessions:true}))}>
-        <span class="nic" style="display:grid;place-items:center"><i style="width:6px;height:6px;background:currentColor;display:block"></i></span>
+        ${iconeNav("mon-materiel")}
         <span>Mon matériel</span>
         <span class="user-count${nbTenu?"":" zero"}">${nbTenu}</span>
       </button>
       ${nbDemandes ? `
       <button class="user-item" title="Quelqu'un demande du matériel de votre sac" ${on(()=>set({userMenu:false, page:"profil", profilDe:null}))}>
-        <span class="nic" style="display:grid;place-items:center"><i style="width:6px;height:6px;background:#f0b45a;border-radius:50%;display:block"></i></span>
+        ${iconeNav("demandes-de-pret")}
         <span>Demandes de prêt</span>
         <span class="user-count">${nbDemandes}</span>
       </button>` : ""}
       ${aRecommander.length ? `
       <button class="user-item" title="${esc(aRecommander.map(g=>g.nom+" : "+g.stock+" en stock, seuil "+g.seuil).join(" · "))}" ${on(()=>set({userMenu:false, page:"admin", adminTab:"consommables"}))}>
-        <span class="nic" style="display:grid;place-items:center"><i style="width:6px;height:6px;background:#e05a50;border-radius:50%;display:block"></i></span>
+        ${iconeNav("consommables-a-recommander")}
         <span>Consommables à recommander</span>
         <span class="user-count alerte">${aRecommander.length}</span>
       </button>` : ""}
-      ${ADMIN && COMPTES.length > 1 ? `
+      ${COMPTES.filter(c=>c!==OPERATOR).length ? `
       <div style="border-top:1px solid var(--c-23262d);margin:3px 0;padding:7px 9px 5px;display:flex;flex-direction:column;gap:5px">
-        <span class="klabel">AGIR AU NOM DE</span>
+        <span class="klabel">AGIR AU NOM DE${ADMIN?"":" · MON GROUPE"}</span>
         <select class="inp" data-k="auteur" style="padding:6px 8px;font-size:11.5px" ${ong(e=>{
           AUTEUR = e.target.value || null;
           setT({ userMenu:false });
@@ -2382,7 +3049,7 @@ function render(){
         </select>
       </div>` : ""}
       <button class="user-item danger" ${on(deconnexion)}>
-        <span class="nic" style="border-radius:50%"></span>
+        ${iconeNav("se-deconnecter")}
         <span>Se déconnecter</span>
       </button>
     </div>`;
@@ -2415,19 +3082,6 @@ function render(){
       ${navItems.map(([p,label,icon])=>`
         <button class="nav-btn${S.page===p?' on':''}" ${on(()=>set({page:p}))}>${icon}<span>${label}</span></button>`).join("")}
     </nav>
-    <div style="margin:26px 20px 0;padding-top:18px;border-top:1px solid var(--c-23262d);display:flex;flex-direction:column;gap:15px">
-      <div class="klabel">ÉTAT DU STOCK</div>
-      <div style="display:flex;flex-direction:column;gap:12px">
-        <div style="display:flex;flex-direction:column;gap:2px">
-          <div style="font:600 23px/1 Archivo,sans-serif;letter-spacing:-.025em;color:var(--c-f2f4f8);font-variant-numeric:tabular-nums">${kpiUnits}</div>
-          <div style="font:400 11px/1.2 Archivo,sans-serif;color:var(--c-7b8290)">appareils en armoire</div>
-        </div>
-        <div style="display:flex;flex-direction:column;gap:2px">
-          <div style="font:600 23px/1 Archivo,sans-serif;letter-spacing:-.025em;color:var(--c-f2f4f8);font-variant-numeric:tabular-nums">${S.refs.length}</div>
-          <div style="font:400 11px/1.2 Archivo,sans-serif;color:var(--c-7b8290)">références actives</div>
-        </div>
-      </div>
-    </div>
     ${pieds}
   </aside>`;
 
@@ -2436,6 +3090,7 @@ function render(){
     : S.page==="materiel" ? "Stock de matériel"
     : S.page==="missions" ? "Missions"
     : S.page==="profil" ? (S.profilDe ? "Profil de "+S.profilDe : "Mon profil")
+    : S.page==="groupe" ? "Mon groupe"
     : S.page==="journal" ? "Journal des mouvements"
     : S.page==="admin" ? "Administration du stock"
     : "Plan de l'armoire "+activeCab.id;
@@ -2443,6 +3098,7 @@ function render(){
     : S.page==="materiel" ? "Accessoires, pièces et consommables · "+S.packs.length+" malette(s) · bacs et étagères de l'atelier"
     : S.page==="missions" ? "Matériel affecté par mission"
     : S.page==="profil" ? "Tableau de bord du compte"
+    : S.page==="groupe" ? (groupeMoi() ? groupeMoi().nom+" · "+groupeMoi().membres.length+" membre"+(groupeMoi().membres.length>1?"s":"")+(groupeMoi().affectation?" · matériel "+groupeMoi().affectation:"") : "Aucun groupe")
     : S.page==="journal" ? "Tous les mouvements de téléphones et de matériel"
     : S.page==="admin" ? "Ajout et suppression des références et articles"
     : sansArmoire ? "Aucune armoire n'est encore définie"
@@ -2461,7 +3117,8 @@ function render(){
     <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
       ${(S.page==="profil" && (!S.profilDe || S.profilDe===auteurEffectif())) ? `<button class="btn-sec${S.profilEdition?" blue":""}" ${on(()=>setT({profilEdition:!S.profilEdition}))}>${S.profilEdition?"Terminer la personnalisation":"Personnaliser"}</button>
       <button class="btn-sec" ${on(()=>setT({reglagesOuverts:true}))}>Réglages</button>` : ""}
-      ${(S.page==="missions"||S.page==="journal"||S.page==="admin"||S.page==="profil") ? "" : `
+      ${(S.page==="missions"||S.page==="journal"||S.page==="admin"||S.page==="profil"||S.page==="groupe") ? "" : `
+      ${S.page==="materiel" ? `<input class="inp" data-k="matq" style="width:300px;font-size:12px;padding:8px 11px" placeholder="Rechercher un article, une malette, une mission…" value="${esc(S.matQuery)}" ${oni(e=>setT({matQuery:e.target.value,stockMaterialPage:0}))}>` : ""}
       ${ADMIN ? `<button class="btn-pri" ${on(()=>S.page==="materiel"?openMatReception():openReception())}>${S.page==="materiel"?"+ Entrée matériel":"+ Réception"}</button>` : ""}`}
     </div>
   </header>`;
@@ -2470,10 +3127,24 @@ function render(){
   let body = "";
   if(S.page==="stock"){
     const brands = ["Toutes", ...Array.from(new Set(S.refs.map(r=>r.brand)))];
-    const filtered = S.refs.filter(r=>
-      (S.brand==="Toutes" || r.brand===S.brand) &&
-      (!searching || matches(r,S.q))
-    );
+    const fp = filtresDe("stock");
+    const filtered = S.refs.filter(r=>{
+      if(!((S.brand==="Toutes" || r.brand===S.brand) && (!searching || matches(r,S.q)))) return false;
+      if(fp.reference && !(r.brand+" "+r.model+" "+(r.mpn||"")+" "+(r.commercialName||"")).toLowerCase().includes(fp.reference.trim().toLowerCase())) return false;
+      if(fp.emplacement && !locOf(r).toLowerCase().includes(fp.emplacement.trim().toLowerCase())) return false;
+      if(fp.qte==="stock" && r.qty <= 0) return false;
+      if(fp.qte==="epuise" && r.qty > 0) return false;
+      if(fp.casier==="fixe" && !S.assignments[r.id]) return false;
+      if(fp.casier==="libre" && S.assignments[r.id]) return false;
+      return true;
+    });
+    const ctlStock = {
+      reference: {label:"Contient", texte:"Marque, modèle, réf. fabricant…"},
+      emplacement: {label:"Contient", texte:"Casier, ex. A·E1"},
+      qte: {liste:[["stock", "En stock (> 0)"], ["epuise", "Épuisé (0)"]]},
+      casier: {liste:[["fixe", "Casier fixé"], ["libre", "Non fixé"]]},
+    };
+    const thS = (col, titre, style, droite, avant)=>thFiltrable("stock", col, titre, ctlStock[col], style, droite, avant);
     const phonePageSize = S.stockPhonePageSize === "all"
       ? Math.max(1, filtered.length)
       : S.stockPhonePageSize === "auto"
@@ -2524,10 +3195,10 @@ function render(){
 
       <div class="card" style="overflow:hidden;flex:1;min-height:170px;display:flex;flex-direction:column">
         <div style="display:grid;grid-template-columns:${PH_GRID()};padding:0 16px;background:var(--c-191c22);border-bottom:1px solid var(--c-23262d);align-items:center;flex:none">
-          <div class="th" style="padding-left:0">RÉFÉRENCE</div>
-          <div class="th">EMPLACEMENT</div>
-          <div class="th" style="text-align:right">QTÉ</div>
-          <div class="th" style="padding-right:0;text-align:right">CASIER</div>
+          ${thS("reference", "RÉFÉRENCE", "padding-left:0", false, boutonToutEffacer("stock"))}
+          ${thS("emplacement", "EMPLACEMENT")}
+          ${thS("qte", "QTÉ", "", true)}
+          ${thS("casier", "CASIER", "padding-right:0", true)}
         </div>
         <div class="serre" ${S.stockPhonePageSize==="all" ? 'style="overflow:auto"' : 'data-rangs="stock" data-rangh="'+ROW_H+'"'}>${rowsHtml}</div>
         ${!filtered.length ? `
@@ -2827,8 +3498,26 @@ function render(){
     const catalogueCommun = S.materiel.filter(m=>!articlesAttribues.has(m.name));
     const cats = ["Toutes", ...Array.from(new Set(catalogueCommun.map(m=>m.cat)))];
     const t = S.matQuery.trim().toLowerCase();
+    /* Les filtres par colonne, qui s'ajoutent à la catégorie et à la recherche. Un
+       filtre vide ne filtre rien ; chaque colonne a le sien. */
+    const fc = filtresDe("materiel");
+    const reserves = m=>(S.matRes[m.id||m.name]||[]).filter(r=>!r.returned);
+    const missionsDe = m=>reserves(m).map(r=>r.mission || SANS_MISSION);
+    const colonnesActives = Object.keys(fc).filter(k=>fc[k]!=="");
+    const passeColonnes = m=>{
+      if(fc.article && !(m.name+" "+(m.libelle||"")+" "+(m.etiquette||"")+" "+(m.numeroSerie||"")).toLowerCase().includes(fc.article.trim().toLowerCase())) return false;
+      if(fc.cat && m.cat !== fc.cat) return false;
+      if(fc.affectation && m.affectation !== fc.affectation) return false;
+      if(fc.qte==="epuise" && m.qty > 0) return false;
+      if(fc.qte==="stock" && m.qty <= 0) return false;
+      if(fc.mission==="__aucune" && reserves(m).length) return false;
+      if(fc.mission && fc.mission!=="__aucune" && !missionsDe(m).includes(fc.mission)) return false;
+      if(fc.reservation==="reserve" && !reserves(m).length) return false;
+      if(fc.reservation==="libre" && reserves(m).length) return false;
+      return true;
+    };
     const filtered = catalogueCommun.filter(m=>{
-      if(!(S.matCat==="Toutes" || m.cat===S.matCat)) return false;
+      if(!passeColonnes(m)) return false;
       if(!t) return true;
       const identifiant = m.id||m.name;
       const missions = (S.matRes[identifiant]||[]).map(r=>r.mission+" "+(r.by||"")).join(" ");
@@ -3014,12 +3703,20 @@ function render(){
         ${packsOuvert?`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:13px;align-items:start;max-height:40vh;overflow:auto">${cartes}</div>`:""}
       </div>`;
 
+    const missionsConnues = Array.from(new Set(catalogueCommun.flatMap(missionsDe))).sort((a,b)=>a.localeCompare(b, "fr"));
+    const controles = {
+      article: {label:"Contient", texte:"Nom, étiquette, série…"},
+      cat: {liste:cats.filter(c=>c!=="Toutes").map(c=>[c, c])},
+      affectation: {liste:AFFECTATIONS.map(a=>[a, a])},
+      qte: {liste:[["stock", "En stock (> 0)"], ["epuise", "Épuisé (0)"]]},
+      mission: {liste:[["__aucune", "Aucune réservation"], ...missionsConnues.map(m=>[m, m])]},
+      reservation: {liste:[["reserve", "Réservés"], ["libre", "Libres"]]},
+    };
+    const thF = (col, titre, style, droite)=>thFiltrable("materiel", col, titre, controles[col], style, droite);
+    const toutEffacer = boutonToutEffacer("materiel");
+
     body = `
     <div style="flex:1;min-height:0;padding:22px 26px 32px;display:flex;flex-direction:column;gap:16px;min-width:0;overflow:auto">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        ${cats.map(c=>chip(c, c===S.matCat, ()=>set({matCat:c,stockMaterialPage:0}))).join("")}
-        <input class="inp" data-k="matq" style="margin-left:auto;flex:0 1 300px;min-width:180px;font-size:12px;padding:8px 11px" placeholder="Rechercher un article, une malette, une mission…" value="${esc(S.matQuery)}" ${oni(e=>setT({matQuery:e.target.value,stockMaterialPage:0}))}>
-      </div>
 
       ${bandePacks}
 
@@ -3032,13 +3729,13 @@ function render(){
 
       <div class="card" style="overflow:hidden;flex:1;min-height:170px;display:flex;flex-direction:column">
         <div style="display:grid;grid-template-columns:${MAT_GRID()};padding:0 16px;background:var(--c-191c22);border-bottom:1px solid var(--c-23262d);align-items:center;flex:none">
-          <div></div>
-          <div class="th" style="padding-left:0">ARTICLE</div>
-          <div class="th" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">CATÉGORIE</div>
-          <div class="th">AFFECTATION</div>
-          <div class="th" style="text-align:right">QTÉ</div>
-          <div class="th">MISSIONS</div>
-          <div class="th" style="padding-right:0;text-align:right">RÉSERVATION</div>
+          <div style="display:flex;align-items:center">${toutEffacer}</div>
+          ${thF("article", "ARTICLE", "padding-left:0")}
+          ${thF("cat", "CATÉGORIE")}
+          ${thF("affectation", "AFFECTATION")}
+          ${thF("qte", "QTÉ", "", true)}
+          ${thF("mission", "MISSIONS")}
+          ${thF("reservation", "RÉSERVATION", "padding-right:0", true)}
         </div>
         <div class="serre" ${S.stockMaterialPageSize==="all" ? 'style="overflow:auto"' : 'data-rangs="materiel" data-rangh="46"'}>${rowsHtml}</div>
         ${!filtered.length ? `
@@ -3054,6 +3751,10 @@ function render(){
   /* ---------- page : administration du stock ---------- */
   if(S.page==="profil"){
     body = pageProfil();
+  }
+
+  if(S.page==="groupe"){
+    body = pageGroupe();
   }
 
   if(S.page==="admin" && ADMIN){
@@ -3192,7 +3893,7 @@ function render(){
             ${it.detail?`<span style="font:400 10.5px/1.2 Archivo,sans-serif;color:var(--c-9aa2af);${checked?"opacity:.65":""}">${esc(it.detail)}</span>`:""}
             ${it.returned?`<span style="font:400 10px/1.2 Archivo,sans-serif;color:var(--c-5fc79a)">Rendu le ${esc(dateComplete(it.returned.iso))} par ${esc(it.returned.by)}</span>`:""}
           </span>
-          ${(!it.returned && equipes.length)?`<select class="inp" style="flex:none;width:118px;padding:4px 6px;font-size:10.5px" aria-label="Équipe de ${esc(it.item)}"
+          ${(!it.returned && equipes.length && peutGererMission(name))?`<select class="inp" style="flex:none;width:118px;padding:4px 6px;font-size:10.5px" aria-label="Équipe de ${esc(it.item)}"
             ${ong(e=>agir("materiel.equipe.affecter",{nom:it.materialId, index:it.index, equipe:e.target.value}))}>
             <option value=""${it.equipe?"":" selected"}>— mission</option>
             ${equipes.map(e=>`<option value="${esc(e.nom)}"${e.nom===it.equipe?" selected":""}>${esc(e.nom)}</option>`).join("")}
@@ -3242,7 +3943,7 @@ function render(){
             ${parts.length?`<span style="font:400 10.5px/1.3 Archivo,sans-serif;color:var(--c-767d8a)">${esc(parts.join(" · "))}</span>`:""}
           </span>
           ${archived?'<span class="badge mut" style="flex:none">ARCHIVÉE</span>':""}
-          <select class="badge ${stCls}" aria-label="Statut de ${esc(name)}" title="${peutReculerMission(name)?"Changer le statut":"Changer le statut — il ne revient pas en arrière, sauf par le gestionnaire de la mission ou un administrateur"}"
+          <select class="badge ${stCls}" aria-label="Statut de ${esc(name)}" ${peutGererMission(name)?"":"disabled"} title="${peutGererMission(name)?"Changer le statut":"Seul un gestionnaire de la mission ou un administrateur change son statut"}"
             style="flex:none;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;padding:4px 20px 4px 7px;background-image:url(&quot;data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='8' height='5'><path d='M0 0h8L4 5z' fill='%23788093'/></svg>&quot;);background-repeat:no-repeat;background-position:right 6px center"
             ${ong(e=>agir("mission.statut", { nom:name, statut:e.target.value }))}>
             ${["PRÉVUE","EN COURS","TERMINÉE","ANNULÉE"].map(v=>`<option value="${v}"${v===st?" selected":""}${changementStatutPermis(st, v, peutReculerMission(name))?"":" disabled"} style="background:var(--c-191c22);color:var(--c-e7e9ee)">${v}</option>`).join("")}
@@ -3297,6 +3998,10 @@ function render(){
     <div style="flex:1;min-height:0;padding:22px 26px 32px;display:flex;flex-direction:column;gap:16px;min-width:0;overflow:auto">
       ${onglets}
       ${vue==='emprunts' ? empruntsHtml : `<div style="display:contents">
+      ${!peutCreerMission() ? `
+      <div class="card" style="max-width:640px;padding:14px 16px;font:400 12px/1.5 Archivo,sans-serif;color:var(--c-9aa2af)">
+        Créer une mission est réservé aux <b style="color:var(--c-e7e9ee);font-weight:600">chefs de groupe</b> et aux <b style="color:var(--c-e7e9ee);font-weight:600">administrateurs</b>. Vous restez libre d'emprunter sans mission, et de demander du matériel dans les sacs.
+      </div>` : `
       <div class="card" style="max-width:640px;padding:16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <input class="inp" data-k="mname" style="flex:1 1 100%;width:100%;min-width:0" placeholder="Nom de la nouvelle mission" value="${esc(S._mName||"")}" ${oni(e=>{S._mName=e.target.value;})}>
         <span style="font:400 11.5px/1.2 Archivo,sans-serif;color:var(--c-767d8a);white-space:nowrap">Créée par : <b style="color:var(--c-e7e9ee);font-weight:500">${esc(OPERATOR)}</b></span>
@@ -3340,7 +4045,7 @@ function render(){
                          {proprietaire:d.proprietaire, article:d.article, qty:d.qty, mission:n, motif:d.motif});
           }
         })}>Créer</button>
-      </div>
+      </div>`}
       ${apercuTemplate}
       ${(archivedCount||S.showArchived) ? `
       <div style="display:flex;align-items:center;gap:8px">
@@ -3357,7 +4062,25 @@ function render(){
     const kinds = ["Tous","Téléphones","Matériel","ENTRÉE","SORTIE","RETOUR","CONSOMMÉ","RÉSERV.","ANNUL.","TRANSF.","AJUST.","CRÉATION"];
     const all = journalRows();
     const lq = S.logQuery.trim().toLowerCase();
+    const fj = filtresDe("journal");
+    const distincts = cle=>Array.from(new Set(all.map(e=>e[cle]).filter(v=>v && v!=="—"))).sort((a,b)=>a.localeCompare(b, "fr"));
+    const ctlJournal = {
+      date: {label:"Contient", texte:"Ex. 18/10, 14:30"},
+      article: {label:"Contient", texte:"Article, étiquette, série, casier…"},
+      qte: {liste:[["avec", "Avec quantité"], ["sans", "Sans quantité"]]},
+      personne: {liste:distincts("who").map(v=>[v, v])},
+      mission: {liste:distincts("mission").map(v=>[v, v])},
+      type: {liste:distincts("kind").map(v=>[v, v])},
+    };
+    const thJ = (col, titre, style, droite, avant)=>thFiltrable("journal", col, titre, ctlJournal[col], style, droite, avant);
     const rows = all.filter(e=>{
+      if(fj.date && !(jourMoisAn(e.iso)+" "+heureMinute(e.iso)+" "+dateComplete(e.iso)).toLowerCase().includes(fj.date.trim().toLowerCase())) return false;
+      if(fj.article && !(e.item+" "+e.loc+" "+e.identite).toLowerCase().includes(fj.article.trim().toLowerCase())) return false;
+      if(fj.qte==="avec" && !e.qty) return false;
+      if(fj.qte==="sans" && e.qty) return false;
+      if(fj.personne && e.who !== fj.personne) return false;
+      if(fj.mission && e.mission !== fj.mission) return false;
+      if(fj.type && e.kind !== fj.type) return false;
       const f = S.logFilter;
       if(f==="Téléphones"){ if(e.source!=="phone") return false; }
       else if(f==="Matériel"){ if(e.source!=="mat") return false; }
@@ -3395,12 +4118,12 @@ function render(){
       </div>
       <div class="card" style="overflow:hidden;flex:1;min-height:170px;display:flex;flex-direction:column">
         <div style="display:grid;grid-template-columns:${LOG_GRID};padding:0 16px;background:var(--c-191c22);border-bottom:1px solid var(--c-23262d);align-items:center;flex:none">
-          <div class="th" style="padding-left:0">DATE</div>
-          <div class="th">ARTICLE</div>
-          <div class="th" style="text-align:right">QTÉ</div>
-          <div class="th">PERSONNE</div>
-          <div class="th">MISSION</div>
-          <div class="th" style="padding-right:0;text-align:right">TYPE</div>
+          ${thJ("date", "DATE", "padding-left:0", false, boutonToutEffacer("journal"))}
+          ${thJ("article", "ARTICLE")}
+          ${thJ("qte", "QTÉ", "", true)}
+          ${thJ("personne", "PERSONNE")}
+          ${thJ("mission", "MISSION")}
+          ${thJ("type", "TYPE", "padding-right:0", true)}
         </div>
         <div class="serre" data-rangs="journal" data-rangh="${LOG_ROW_H}">${rowsHtml}</div>
         ${!rows.length ? `
@@ -3636,7 +4359,7 @@ function render(){
   // Réservation matériel (unitaire)
   if(S.matResForm){
     const f = S.matResForm;
-    const options = missionNames();
+    const options = missionNamesEmpruntables();
     const available = matAvailable(f.name);
     const wanted = Math.max(1, Number(f.qty)||1);
     const overQty = wanted > available;
@@ -3645,9 +4368,9 @@ function render(){
       <div style="padding:9px 11px;display:flex;align-items:center;gap:9px">
         <span style="flex:1;min-width:0;font:400 11.5px/1.2 Archivo,sans-serif;color:var(--c-c3c9d3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.mission+" · pris par "+(r.by||"non précisé")+(r.returned?" · rendu":""))}</span>
         <span style="font:600 11px/1 Archivo,sans-serif;color:var(--c-f0b45a)">${r.qty} u.</span>
-        <button class="btn-cell hred" style="padding:4px 8px;font-size:10px" ${on(()=>{
+        ${peutRendreLigne(r)?`<button class="btn-cell hred" style="padding:4px 8px;font-size:10px" ${on(()=>{
           agir("materiel.emprunt.retour", { nom:f.name, index:k, empreinte:empreinte(r) });
-        })}>Restituer</button>
+        })}>Restituer</button>`:""}
       </div>`).join("");
 
     modals += `
@@ -3700,7 +4423,7 @@ function render(){
   // Réservation groupée
   if(S.matBatch){
     const b = S.matBatch;
-    const options = missionNames();
+    const options = missionNamesEmpruntables();
     b.packs = (b.packs||[]).filter(nom=>{
       const pk = S.packs.find(x=>x.name===nom); return pk && packDisponible(pk);
     });
@@ -3887,7 +4610,7 @@ function render(){
           </div>
           <label class="field">
             <span class="klabel">DATE PRÉVUE</span>
-            <input class="inp" data-k="eddate" type="date" value="${esc(f.date)}" ${ong(e=>{f.date=e.target.value;})}>
+            <input class="inp" data-k="eddate" type="date" value="${esc(f.date)}" ${peutGererMission(f.name)?"":"disabled title=\"Réservé aux gestionnaires de la mission et aux administrateurs\""} ${ong(e=>{f.date=e.target.value;})}>
           </label>
           <div class="field">
             <span class="klabel">GESTION ET EFFECTIF</span>
@@ -3919,8 +4642,8 @@ function render(){
                   <span style="font:400 10px/1.3 Archivo,sans-serif;color:var(--c-9aa2af);overflow-wrap:anywhere">${[matDetail(id), "pris par "+(r.by||"non précisé"), r.equipe?"équipe "+r.equipe:"", r.sacDe?"prêté par "+r.sacDe:""].filter(Boolean).map(esc).join(" · ")}</span>
                 </span>
                 ${desassignable
-                  ? `<button class="btn-mini hred" title="Retire le matériel de la mission et le rend : il regagne le stock${r.sacDe?" (ici, le sac de "+r.sacDe+")":""}." ${on(()=>agir("materiel.mission.desassigner",{nom:id, index, empreinte:empreinte(r)}))}>Désassigner</button>`
-                  : `<button class="btn-mini hblue" title="Rend ce matériel : il regagne le stock${r.sacDe?" (ici, le sac de "+r.sacDe+")":""}, et la ligne se ferme dans la mission." ${on(()=>agir("materiel.mission.restituer_ligne",{nom:id, index, empreinte:empreinte(r)}))}>Restituer</button>`}
+                  ? (!peutGererMission(f.name) ? "" : `<button class="btn-mini hred" title="Retire le matériel de la mission et le rend : il regagne le stock${r.sacDe?" (ici, le sac de "+r.sacDe+")":""}." ${on(()=>agir("materiel.mission.desassigner",{nom:id, index, empreinte:empreinte(r)}))}>Désassigner</button>`)
+                  : (!peutRendreLigne({by:r.by, sacDe:r.sacDe, mission:f.name}) ? "" : `<button class="btn-mini hblue" title="Rend ce matériel : il regagne le stock${r.sacDe?" (ici, le sac de "+r.sacDe+")":""}, et la ligne se ferme dans la mission." ${on(()=>agir("materiel.mission.restituer_ligne",{nom:id, index, empreinte:empreinte(r)}))}>Restituer</button>`)}
               </div>`).join("")}</div>
             ${desassignable
               ? `<span style="font:400 10.5px/1.4 Archivo,sans-serif;color:var(--c-6d7480)">La mission est prévue : « Désassigner » retire la ligne de la mission et rend le matériel, qui regagne le stock. Une fois la mission en cours, on restitue.</span>`
@@ -3933,22 +4656,22 @@ function render(){
               <button class="btn-mini hblue" ${on(()=>copierLien(lienMission(f.name), f.name))}>Copier le lien</button>
               <button class="btn-mini hblue" ${on(()=>{ setT({editMission:null}); ouvrirDemandePret("direct", f.name); })}>Demander du matériel personnel</button>
               ${peutGererMission(f.name)?`<button class="btn-mini hwhite" ${on(()=>{ setT({editMission:null}); ouvrirEquipe(f.name, null); })}>+ Équipe</button>`:""}
-              ${f.ouvertes?`<button class="btn-mini hblue" ${on(()=>setT({editMission:null, releaseForm:{mission:f.name, by:"", consommes:{}, commentaire:""}}))}>Restituer tout</button>`:""}
-              ${f.archivable?`<button class="btn-mini hblue" ${on(()=>{ setT({editMission:null}); setMissionArchived(f.name, {}, true); })}>Archiver</button>`:""}
-              ${f.archived?`<button class="btn-mini hblue" ${on(()=>{ setT({editMission:null}); setMissionArchived(f.name, {}, false); })}>Désarchiver</button>`:""}
-              ${f.vide?`<button class="btn-mini hred" ${on(()=>{ setT({editMission:null}); agir("mission.supprimer",{nom:f.name}); })}>Supprimer</button>`:""}
+              ${f.ouvertes && peutGererMission(f.name)?`<button class="btn-mini hblue" ${on(()=>setT({editMission:null, releaseForm:{mission:f.name, by:"", consommes:{}, commentaire:""}}))}>Restituer tout</button>`:""}
+              ${f.archivable && peutGererMission(f.name)?`<button class="btn-mini hblue" ${on(()=>{ setT({editMission:null}); setMissionArchived(f.name, {}, true); })}>Archiver</button>`:""}
+              ${f.archived && peutGererMission(f.name)?`<button class="btn-mini hblue" ${on(()=>{ setT({editMission:null}); setMissionArchived(f.name, {}, false); })}>Désarchiver</button>`:""}
+              ${f.vide && ADMIN?`<button class="btn-mini hred" ${on(()=>{ setT({editMission:null}); agir("mission.supprimer",{nom:f.name}); })}>Supprimer</button>`:""}
             </span>
           </div>
         </div>
         <div class="modal-foot">
           <button class="btn-sec" style="padding:9px 14px" ${on(()=>setT({editMission:null}))}>Annuler</button>
-          <button class="btn-pri" style="padding:9px 16px" ${on(async ()=>{
+          ${peutGererMission(f.name)?`<button class="btn-pri" style="padding:9px 16px" ${on(async ()=>{
             // Le responsable n'est pas modifié : c'est celui qui a créé la
             // mission, pas celui qui en corrige la date aujourd'hui.
             if(await agir("mission.date", { nom:f.name, date:f.date||"" })){
               setT({ editMission:null });
             }
-          })}>Enregistrer</button>
+          })}>Enregistrer</button>`:""}
         </div>
       </div>
     </div>`;
@@ -4064,6 +4787,10 @@ function render(){
     </div>`;
   }
 
+  if(S.fiche && ADMIN) modals += ficheCompte(S.fiche);
+  if(S.groupeEdit && ADMIN) modals += ficheGroupe(S.groupeEdit);
+  if(S.sacMembre && S.page==="groupe") modals += fenetreSacMembre(S.sacMembre);
+
   if(S.dotationEdit){
     const f = S.dotationEdit;
     const recherche = (f.query||"").trim().toLowerCase();
@@ -4174,9 +4901,9 @@ function render(){
     const choisi = f.choix ? ligneDeSac(f.choix.proprietaire, f.choix.article) : null;
     // Forcer : le gestionnaire de la mission (ou un administrateur) peut se servir
     // dans le sac d'une personne absente, sans attendre sa réponse.
-    const peutForcer = f.mode==="file"
-      ? (ADMIN || (S._mGestion || [OPERATOR]).includes(auteurEffectif()))
-      : (f.mission!==SANS_MISSION && peutGererMission(f.mission));
+    const peutForcer = !f.choix ? false
+      : peutForcerPour(f.mode==="file" ? "" : f.mission, f.choix.proprietaire)
+        || (f.mode==="file" && (ADMIN || (S._mGestion || [OPERATOR]).includes(OPERATOR)));
     const missions = missionNames().filter(n=>n!==SANS_MISSION);
     modals += `
     <div class="modal-back">
@@ -4431,7 +5158,7 @@ function render(){
     const pack = S.packs.find(x=>x.name===b.pack);
     if(!pack){ S.packBorrow = null; }
     else {
-      const options = missionNames();
+      const options = missionNamesEmpruntables();
       const dejaSorti = {};
       packSorties(pack.name).forEach(d=>{ dejaSorti[d.id] = (dejaSorti[d.id]||0) + d.qty; });
       const retenues = pack.items.filter(i=>!i.manquant && !dejaSorti[i.id] && b.choix[i.id]);
@@ -4878,7 +5605,7 @@ async function confirmMatReception(){
       nom:f.newName, cat:f.newCat, affectation:f.newAffectation, qty:n,
       etiquette:f.etiquette||"", numeroSerie:f.numeroSerie||""
     });
-    if(ok) S.matCat = "Toutes";
+    if(ok) S.colFiltres.materiel.cat = "";
   } else {
     ok = await agir("materiel.reception", { nom:f.name, qty:n });
   }
@@ -5014,7 +5741,7 @@ async function sansNumeroDeSerie(){
   if(await agir("materiel.creer", { nom:r.newName, cat:r.newCat,
                                     affectation:r.newAffectation, qty:n,
                                     etiquette:r.etiquette||"", numeroSerie:"" })){
-    S.matCat = "Toutes";
+    S.colFiltres.materiel.cat = "";
     setT({ lotForm:null, matReceptForm:null });
   }
 }
@@ -5048,7 +5775,7 @@ async function confirmLotForm(){
   if(await agir("materiel.creer.lot", { nom:(f.nom||"").trim(), cat:f.cat,
                                         affectation:f.affectation, series,
                                         etiquettes })){
-    if(Number(f.attendus)) S.matCat = "Toutes";
+    if(Number(f.attendus)) S.colFiltres.materiel.cat = "";
     setT({ lotForm:null, matReceptForm:null });
   }
 }
@@ -5142,6 +5869,8 @@ async function boot(){
     if(d.user) OPERATOR = d.user;
     if(d.admin!==undefined) ADMIN = !!d.admin;
     if(d.comptes) COMPTES = d.comptes;
+    // Le rôle, le groupe, les sacs… : dès le premier affichage, pas au premier sondage.
+    appliquerEnveloppe(d);
     // Les réglages du compte, puis la page d'accueil : le profil.
     appliquerReglages(d.reglages);
     S.page = pageDeLOnglet(OPERATOR);

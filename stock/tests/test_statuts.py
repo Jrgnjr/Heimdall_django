@@ -48,28 +48,41 @@ class Base(TestCase):
 
 
 class OrdreDesStatuts(Base):
+    """Alice gère « Chantier » ; Bob n'a aucun rôle sur cette mission."""
+
+    # -- qui peut changer un statut ---------------------------------------
+
+    def test_seul_le_gestionnaire_change_le_statut(self):
+        message = self.refus("mission.statut", "Bob", nom="Chantier", statut=EN_COURS)
+        self.assertIn("réservé aux gestionnaires", message)
+        self.assertIn("(Alice)", message)
+        self.assertEqual(self.statut(), PREVUE)
+        self.poser("Alice", EN_COURS)
+        self.assertEqual(self.statut(), EN_COURS)
+
+    def test_un_administrateur_change_tous_les_statuts(self):
+        self.poser("Admin", TERMINEE)
+        self.assertEqual(self.statut(), TERMINEE)
+
+    def test_le_gestionnaire_d_une_autre_mission_n_a_pas_la_main(self):
+        Mission.objects.create(name="Autre", ordre=2, is_meta=True, owner="Bob",
+                               archived=False)
+        self.agir("mission.statut", "Bob", nom="Autre", statut=TERMINEE)
+        self.refus("mission.statut", "Alice", nom="Autre", statut=EN_COURS)
 
     # -- avancer ----------------------------------------------------------
 
-    def test_n_importe_qui_peut_avancer(self):
-        self.poser("Bob", EN_COURS)
+    def test_on_avance_dans_l_ordre(self):
+        self.poser("Alice", EN_COURS)
         self.assertEqual(self.statut(), EN_COURS)
-        self.poser("Bob", TERMINEE)
+        self.poser("Alice", TERMINEE)
         self.assertEqual(self.statut(), TERMINEE)
 
     def test_on_peut_sauter_une_etape_en_avancant(self):
-        self.poser("Bob", TERMINEE)
+        self.poser("Alice", TERMINEE)
         self.assertEqual(self.statut(), TERMINEE)
 
     # -- reculer ----------------------------------------------------------
-
-    def test_un_utilisateur_ordinaire_ne_recule_pas(self):
-        for depart, arrivee in ((EN_COURS, PREVUE), (TERMINEE, EN_COURS), (TERMINEE, PREVUE)):
-            self.poser("Alice", depart)
-            message = self.refus("mission.statut", "Bob", nom="Chantier", statut=arrivee)
-            self.assertIn("ne revient pas en arrière", message, (depart, arrivee))
-            self.assertIn("gestionnaire de la mission (Alice)", message)
-            self.assertEqual(self.statut(), depart)
 
     def test_le_gestionnaire_peut_reculer(self):
         self.poser("Alice", TERMINEE)
@@ -79,76 +92,84 @@ class OrdreDesStatuts(Base):
         self.assertEqual(self.statut(), PREVUE)
 
     def test_un_administrateur_peut_reculer(self):
-        self.poser("Bob", TERMINEE)
+        self.poser("Alice", TERMINEE)
         self.poser("Admin", PREVUE)
         self.assertEqual(self.statut(), PREVUE)
 
-    def test_le_gestionnaire_n_est_pas_le_simple_createur_d_une_autre_mission(self):
-        Mission.objects.create(name="Autre", ordre=2, is_meta=True, owner="Bob",
-                               archived=False)
-        self.agir("mission.statut", "Bob", nom="Autre", statut=TERMINEE)
-        self.refus("mission.statut", "Alice", nom="Autre", statut=EN_COURS)
+    def test_un_tiers_ne_recule_pas(self):
+        for depart, arrivee in ((EN_COURS, PREVUE), (TERMINEE, EN_COURS), (TERMINEE, PREVUE)):
+            self.poser("Alice", depart)
+            message = self.refus("mission.statut", "Bob", nom="Chantier", statut=arrivee)
+            self.assertIn("réservé aux gestionnaires", message, (depart, arrivee))
+            self.assertEqual(self.statut(), depart)
 
     def test_reculer_abaisse_le_plancher(self):
         """Sinon le calcul remonterait aussitôt la mission à son ancien niveau."""
-        self.poser("Bob", TERMINEE)
+        self.poser("Alice", TERMINEE)
         self.poser("Alice", PREVUE)
         self.assertEqual(self.mission().status_max, PREVUE)
         self.assertEqual(self.statut(), PREVUE)
 
     def test_rester_au_meme_statut_est_toujours_permis(self):
-        self.poser("Bob", EN_COURS)
-        self.poser("Bob", EN_COURS)
+        self.poser("Alice", EN_COURS)
+        self.poser("Alice", EN_COURS)
 
     # -- annulée, à part --------------------------------------------------
 
-    def test_n_importe_qui_peut_annuler_une_mission_prevue_ou_en_cours(self):
-        self.poser("Bob", ANNULEE)
+    def test_le_gestionnaire_annule_une_mission_prevue_ou_en_cours(self):
+        self.poser("Alice", ANNULEE)
         self.assertEqual(self.statut(), ANNULEE)
         self.poser("Alice", PREVUE)
         self.poser("Alice", EN_COURS)
-        self.poser("Bob", ANNULEE)
-        self.assertEqual(self.statut(), ANNULEE)
-
-    def test_une_mission_terminee_ne_s_annule_que_par_son_gestionnaire(self):
-        self.poser("Bob", TERMINEE)
-        self.assertIn("ne s'annule pas", self.refus("mission.statut", "Bob",
-                                                    nom="Chantier", statut=ANNULEE))
         self.poser("Alice", ANNULEE)
         self.assertEqual(self.statut(), ANNULEE)
 
-    def test_sortir_d_annulee_est_reserve(self):
-        self.poser("Bob", ANNULEE)
+    def test_un_tiers_n_annule_pas(self):
+        self.refus("mission.statut", "Bob", nom="Chantier", statut=ANNULEE)
+        self.assertEqual(self.statut(), PREVUE)
+
+    def test_le_gestionnaire_annule_meme_une_mission_terminee(self):
+        self.poser("Alice", TERMINEE)
+        self.poser("Alice", ANNULEE)
+        self.assertEqual(self.statut(), ANNULEE)
+
+    def test_un_tiers_ne_rouvre_pas_une_mission_annulee(self):
+        self.poser("Alice", ANNULEE)
         for cible in (PREVUE, EN_COURS, TERMINEE):
-            self.assertIn("ne se rouvre pas", self.refus(
-                "mission.statut", "Bob", nom="Chantier", statut=cible))
+            self.refus("mission.statut", "Bob", nom="Chantier", statut=cible)
         self.poser("Alice", EN_COURS)
         self.assertEqual(self.statut(), EN_COURS)
 
     def test_un_administrateur_rouvre_une_mission_annulee(self):
-        self.poser("Bob", ANNULEE)
+        self.poser("Alice", ANNULEE)
         self.poser("Admin", PREVUE)
         self.assertEqual(self.statut(), PREVUE)
 
     def test_annuler_ne_change_pas_le_plancher(self):
-        self.poser("Bob", EN_COURS)
-        self.poser("Bob", ANNULEE)
+        self.poser("Alice", EN_COURS)
+        self.poser("Alice", ANNULEE)
         self.assertEqual(self.mission().status_max, EN_COURS)
 
     # -- mission sans ligne propre ----------------------------------------
 
-    def test_une_mission_implicite_se_materialise_au_premier_changement(self):
-        self.agir("mission.statut", "Bob", nom="Venue d'un emprunt", statut=EN_COURS)
+    def test_une_mission_implicite_n_a_que_les_administrateurs_pour_gestionnaires(self):
+        """Elle n'a pas de créateur : seul un administrateur peut la matérialiser."""
+        self.refus("mission.statut", "Bob", nom="Venue d'un emprunt", statut=EN_COURS)
+        self.agir("mission.statut", "Admin", nom="Venue d'un emprunt", statut=EN_COURS)
         m = Mission.objects.get(pk="Venue d'un emprunt")
         self.assertEqual((m.is_meta, m.status_override), (False, EN_COURS))
 
     # -- pas de falsification ---------------------------------------------
 
     def test_le_client_ne_peut_pas_s_attribuer_le_droit_administrateur(self):
-        self.poser("Alice", TERMINEE)
-        message = self.refus("mission.statut", "Bob", nom="Chantier", statut=PREVUE,
+        message = self.refus("mission.statut", "Bob", nom="Chantier", statut=TERMINEE,
                              _administrateur=True)
-        self.assertIn("ne revient pas en arrière", message)
+        self.assertIn("réservé aux gestionnaires", message)
+
+    def test_le_client_ne_peut_pas_se_faire_passer_pour_un_autre_acteur(self):
+        message = self.refus("mission.statut", "Bob", nom="Chantier", statut=TERMINEE,
+                             _acteur="Alice")
+        self.assertIn("réservé aux gestionnaires", message)
 
 
 class PlancherDuStatutCalcule(Base):
@@ -216,21 +237,22 @@ class PlancherDuStatutCalcule(Base):
         etat = alice.get(reverse("api_state")).json()
         self.assertEqual(etat["plancherMissions"], {"Chantier": EN_COURS})
 
-    def test_un_changement_de_statut_par_l_api_respecte_l_ordre(self):
+    def test_un_changement_de_statut_par_l_api_exige_la_gestion(self):
         alice, bob = self.ouvrir("Alice"), self.ouvrir("Bob")
-        self.poster(bob, "mission.statut", nom="Chantier", statut=TERMINEE)
-        refus = self.poster(bob, "mission.statut", nom="Chantier", statut=PREVUE)
+        refus = self.poster(bob, "mission.statut", nom="Chantier", statut=TERMINEE)
         self.assertEqual(refus.status_code, 422)
         self.assertIn("gestionnaire", refus.json()["error"])
+        self.assertEqual(self.statut(), PREVUE)
+        self.assertEqual(self.poster(alice, "mission.statut", nom="Chantier",
+                                     statut=TERMINEE).status_code, 200)
         self.assertEqual(self.poster(alice, "mission.statut", nom="Chantier",
                                      statut=PREVUE).status_code, 200)
         self.assertEqual(self.statut(), PREVUE)
 
     def test_le_client_ne_peut_pas_se_declarer_administrateur_par_l_api(self):
-        bob = self.ouvrir("Bob")
-        self.poster(bob, "mission.statut", nom="Chantier", statut=TERMINEE)
-        refus = self.poster(bob, "mission.statut", nom="Chantier", statut=PREVUE,
-                            _administrateur=True)
+        self.poster(self.ouvrir("Alice"), "mission.statut", nom="Chantier", statut=TERMINEE)
+        refus = self.poster(self.ouvrir("Bob"), "mission.statut", nom="Chantier",
+                            statut=PREVUE, _administrateur=True, _acteur="Alice")
         self.assertEqual(refus.status_code, 422)
         self.assertEqual(self.statut(), TERMINEE)
 
@@ -347,8 +369,13 @@ class RestituerUneLigne(Base):
                    empreinte="99|Autre|Quelqu'un")
         self.assertTrue(self.ligne().ouvert)
 
-    def test_tout_utilisateur_peut_restituer(self):
-        self.restituer("Bob")
+    def test_un_tiers_ne_peut_pas_restituer(self):
+        self.assertIn("Seul l'emprunteur", self.refus(
+            "materiel.mission.restituer_ligne", "Bob", nom="Perceuse", index=0))
+        self.assertTrue(self.ligne().ouvert)
+
+    def test_le_gestionnaire_de_la_mission_peut_restituer(self):
+        self.restituer("Admin")
         self.assertFalse(self.ligne().ouvert)
 
     def test_la_derniere_ligne_rendue_termine_la_mission_calculee(self):

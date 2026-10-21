@@ -92,3 +92,54 @@ class ChampsDeSaisie(SimpleTestCase):
         self.assertIn("app.querySelector('[data-k=\"'+CSS.escape(focusKey)+'\"]')",
                       self.source)
         self.assertIn("setSelectionRange(focusPos,focusPos)", self.source)
+
+    def test_les_listes_de_stock_admin_gardent_les_commandes_et_defilent(self):
+        for onglet, rubrique in (("phones", "Téléphones"), ("material", "Matériel")):
+            with self.subTest(rubrique=rubrique):
+                self.assertIn(
+                    '<section class="card admin-stock-card" aria-label="%s" '
+                    'style="overflow:hidden;display:${S.adminTab==="%s"?"flex":"none"};'
+                    % (rubrique, onglet),
+                    self.source,
+                )
+                section = self.source.split(
+                    'aria-label="%s"' % rubrique, 1
+                )[1].split("</section>", 1)[0]
+                self.assertIn(
+                    'display:${S.adminTab==="%s"?"flex":"none"};'
+                    "flex-direction:column;flex:1;min-height:0" % onglet,
+                    section,
+                )
+                self.assertIn('class="admin-stock-list"', section)
+        self.assertIn(
+            ".admin-stock-list{flex:1;min-height:0;overflow:auto}",
+            self.source,
+        )
+
+    def test_le_formulaire_de_creation_template_a_un_espace_sous_les_boutons(self):
+        editeur = self.source.split("function editeurTemplate(f){", 1)[1]
+        self.assertIn(
+            ".template-editor-card{flex:1;min-height:0;overflow-y:auto;"
+            "overscroll-behavior:contain}",
+            self.source,
+        )
+        self.assertIn(
+            '<div class="card template-editor-card" '
+            'style="display:${S.adminTab==="templates"?"block":"none"}">',
+            editeur,
+        )
+        self.assertIn(
+            'overflow:${S.adminTab==="templates"&&S.templateEdit?"hidden":"auto"}',
+            self.source,
+        )
+        pied = editeur.split('class="template-editor-actions"', 1)[1].split(
+            "</div>", 1
+        )[0]
+        self.assertIn(
+            'padding:14px 16px ${f.origine?"14px":"10px"}', pied
+        )
+        self.assertIn(">Annuler</button>", pied)
+        self.assertIn(
+            '>${f.origine?"Enregistrer":"Créer le template"}</button>',
+            pied,
+        )

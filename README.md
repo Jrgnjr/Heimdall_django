@@ -467,7 +467,7 @@ JavaScript sans framework ni étape de build. Elle dialogue avec le serveur par
 
 - **Une seule couleur d'accent : le doré** (`--gold`) — bouton principal, élément actif,
   focus au clavier. Quatre couleurs d'état qui ne se mélangent pas : `--ok` (entrée,
-  retour, accepté, en cours), `--warn` (à traiter : non placé, stock bas, sortie,
+  retour, accepté, en cours), `--warn` (à traiter : non placé, consommable à recommander, sortie,
   réservé), `--danger` (suppression, erreur), `--info` (prévu, information). Les
   emplacements (`A1·E1·C1`) sont neutres, en police mono.
 - **Polices** Inter et JetBrains Mono, hébergées dans `static/stock/fonts/` (pas d'appel

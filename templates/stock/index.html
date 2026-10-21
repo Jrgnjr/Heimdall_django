@@ -294,8 +294,6 @@ const ROW_H = 58;            // une ligne de la maquette : deux lignes de texte 
    se résoudrait différemment dans l'une et dans l'autre — `auto`, par exemple —
    les désalignerait. */
 const PH_GRID  = () => "minmax(0,1fr) 150px 76px " + (ADMIN ? "150px" : "120px");
-// Hypothèse de la maquette : « stock bas » à 5 unités ou moins (affichage seulement).
-const SEUIL_STOCK_BAS_TEL = 5;
 const MAT_GRID = () => "minmax(0,1fr) 128px 76px 180px 150px " + (ADMIN ? "150px" : "110px");
 
 /* ---------- filtres par colonne ----------
@@ -442,7 +440,7 @@ const CATEGORIES_MATERIEL = ["Stockage", "Dongle", "Outil", "Ordinateur", "Conso
    utilise au retour de mission, et ne rentre alors pas au stock. Doit rester
    identique a CATEGORIE_CONSOMMABLE dans coeur/base.py. */
 const CATEGORIE_CONSOMMABLE = "Consommable";
-const LOG_GRID = "88px minmax(0,1fr) 72px 170px 130px 130px";
+const LOG_GRID = "124px minmax(0,1fr) 72px 170px 130px 130px";
 const LOG_PAGE_SIZE = 20;      // repli si la mesure n'a pas encore eu lieu
 const LOG_ROW_H = 56;
 const STOCK_PAGE_SIZE = 20;
@@ -2741,7 +2739,7 @@ function carteConsommables(){
       ? '<span style="font:400 12px/1.2 Inter,system-ui,sans-serif;color:var(--c-9aa2af);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">série '+esc(m.numeroSerie)+(m.etiquette?" · étiq. "+esc(m.etiquette):"")+'</span>'
       : '<span style="font:400 12px/1.2 Inter,system-ui,sans-serif;color:var(--c-6d7480);white-space:nowrap">non identifié</span>';
     return `
-    <div style="display:grid;grid-template-columns:minmax(150px,2fr) 70px 86px 70px 84px 136px 150px;padding:0 16px${enfant?" 0 34px":""};min-height:48px;align-items:center;border-bottom:1px solid ${enfant&&dernier?"var(--c-343a45)":"var(--c-1f232a)"}${enfant?";background:var(--c-13161b);box-shadow:inset 3px 0 0 var(--gold)":""}">
+    <div style="display:grid;grid-template-columns:minmax(150px,2fr) 70px 86px 70px 100px 160px 200px;padding:0 16px${enfant?" 0 34px":""};min-height:48px;align-items:center;border-bottom:1px solid ${enfant&&dernier?"var(--c-343a45)":"var(--c-1f232a)"}${enfant?";background:var(--c-13161b);box-shadow:inset 3px 0 0 var(--gold)":""}">
       <span style="min-width:0;padding-right:8px;display:flex;flex-direction:column;gap:2px">
         ${enfant?"":`<span style="font:500 12px Inter,system-ui,sans-serif;color:var(--c-eef0f4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</span>`}
         ${trace}
@@ -2772,7 +2770,7 @@ function carteConsommables(){
     const consomme = totalConsomme(ids[0]);
     const bas = basGroupe(g);
     return `
-    <div style="display:grid;grid-template-columns:minmax(150px,2fr) 70px 86px 70px 84px 136px 150px;padding:0 16px;min-height:48px;align-items:center;border-bottom:1px solid var(--c-23262d)${ouvert?";background:var(--c-191c22);box-shadow:inset 3px 0 0 var(--gold)":""}">
+    <div style="display:grid;grid-template-columns:minmax(150px,2fr) 70px 86px 70px 100px 160px 200px;padding:0 16px;min-height:48px;align-items:center;border-bottom:1px solid var(--c-23262d)${ouvert?";background:var(--c-191c22);box-shadow:inset 3px 0 0 var(--gold)":""}">
       <span style="min-width:0;padding-right:8px;display:flex;flex-direction:column;gap:2px;cursor:pointer" title="Déplier / replier" ${on(()=>setT({consoOuverts:Object.assign({},S.consoOuverts,{[g.nom]:!ouvert})}))}>
         <span style="font:500 12px Inter,system-ui,sans-serif;color:var(--c-eef0f4);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span style="display:inline-block;width:14px;color:var(--c-8fb4ff)">${ouvert?"▾":"▸"}</span>${esc(g.nom)}</span>
         <span style="font:400 12px/1.2 Inter,system-ui,sans-serif;color:var(--c-9aa2af);padding-left:14px">${g.membres.length} exemplaires</span>
@@ -2830,7 +2828,7 @@ function carteConsommables(){
       </div>
     </div>
     <div style="padding:12px 20px;border-bottom:1px solid var(--line)">${champRecherche("adminconsoq", "Rechercher un consommable, une mission…", S.adminConsoQuery||"", v=>setT({adminConsoQuery:v, adminConsoPage:0}))}</div>
-    <div style="display:grid;grid-template-columns:minmax(150px,2fr) 70px 86px 70px 84px 136px 150px;padding:0 16px;background:var(--c-191c22);border-bottom:1px solid var(--c-23262d);align-items:center">
+    <div style="display:grid;grid-template-columns:minmax(150px,2fr) 70px 86px 70px 100px 160px 200px;padding:0 16px;background:var(--c-191c22);border-bottom:1px solid var(--c-23262d);align-items:center">
       <div class="th" style="padding-left:0">ARTICLE · SÉRIE</div>
       <div class="th" style="text-align:right">STOCK</div>
       <div class="th" style="text-align:right">SEUIL</div>
@@ -3221,14 +3219,13 @@ function render(){
       if(fp.emplacement && !fp.emplacement.startsWith("__") && locOf(r) !== fp.emplacement) return false;
       if(fp.qte==="stock" && r.qty <= 0) return false;
       if(fp.qte==="epuise" && r.qty > 0) return false;
-      if(fp.qte==="bas" && r.qty > SEUIL_STOCK_BAS_TEL) return false;
       return true;
     });
     const locsConnues = Array.from(new Set(S.refs.filter(r=>place[r.id]).map(r=>locOf(r)))).sort();
     const ctlStock = {
       reference: {label:"Contient", texte:"Marque, modèle, réf. fabricant…"},
       emplacement: {liste:[["__nonplace", "Non placés"], ["__fixe", "Casier fixé à la main"], ["__libre", "Casier automatique"], ...locsConnues.map(l=>[l, l])]},
-      qte: {liste:[["bas", "Stock bas (≤ "+SEUIL_STOCK_BAS_TEL+")"], ["stock", "En stock (> 0)"], ["epuise", "Épuisé (0)"]]},
+      qte: {liste:[["stock", "En stock (> 0)"], ["epuise", "Épuisé (0)"]]},
     };
     const thS = (col, titre, style, droite, avant)=>thFiltrable("stock", col, titre, ctlStock[col], style, droite, avant);
     const phonePageSize = S.stockPhonePageSize === "all"
@@ -3241,7 +3238,7 @@ function render(){
     S.stockPhonePage = phonePage;
     const pageFiltered = filtered.slice(phonePage*phonePageSize, (phonePage+1)*phonePageSize);
     const rowsHtml = pageFiltered.map(r=>{
-      const fixed = !!S.assignments[r.id], nonPlace = !place[r.id], bas = r.qty <= SEUIL_STOCK_BAS_TEL;
+      const fixed = !!S.assignments[r.id], nonPlace = !place[r.id];
       const affecter = e=>{ e.stopPropagation(); set({page:"armoire", assigning:r.id, selId:r.id}); };
       const idMenu = "tel:"+r.id;
       return `
@@ -3255,8 +3252,7 @@ function render(){
           ${fixed ? `<span class="badge b-gold" title="Casier choisi à la main">Fixé</span>` : ""}
         </div>
         <div class="num" style="text-align:right;font-weight:600;font-size:15px;display:flex;justify-content:flex-end;align-items:center;gap:6px">
-          ${bas ? `<span title="Stock bas" style="width:6px;height:6px;border-radius:999px;background:var(--warn)"></span>` : ""}
-          <span${bas ? ' style="color:var(--warn)"' : ""}>${r.qty}</span>
+          <span>${r.qty}</span>
         </div>
         <div style="display:flex;justify-content:flex-end;align-items:center;gap:4px">
           ${nonPlace ? `<button class="btn btn-sm" type="button" style="border-color:var(--warn);color:var(--warn)" ${on(affecter)}>Affecter</button>`
@@ -3290,7 +3286,6 @@ function render(){
 
     // À traiter : ce qui demande une action, puis les chiffres d'ensemble.
     const nonPlaces = S.refs.filter(r=>!place[r.id]);
-    const stocksBas = S.refs.filter(r=>r.qty <= SEUIL_STOCK_BAS_TEL);
     const noms = l=>l.slice(0,3).map(r=>r.brand+" "+r.model).join(", ")+(l.length>3?"…":"");
     const aTraiter = (n, titre, detail, libelleBouton, fn)=>`
       <div class="card" style="flex:1 1 300px;display:flex;align-items:center;gap:14px;padding:14px 18px">
@@ -3304,7 +3299,6 @@ function render(){
     const sectionATraiter = `
       <section aria-label="À traiter" style="display:flex;flex-wrap:wrap;gap:12px">
         ${nonPlaces.length ? aTraiter(nonPlaces.length, "Références non placées", noms(nonPlaces), "Affecter un casier", ()=>set({page:"armoire", assigning:nonPlaces[0].id, selId:nonPlaces[0].id})) : ""}
-        ${stocksBas.length ? aTraiter(stocksBas.length, "Stocks bas ("+SEUIL_STOCK_BAS_TEL+" u. ou moins)", noms(stocksBas), "Voir", ()=>poserFiltre("stock", "qte", "bas", true)) : ""}
         <div class="card" style="flex:1 1 220px;display:flex;align-items:center;gap:14px;padding:14px 18px">
           <div style="flex:1"><div class="over">Appareils en armoire</div><div class="num" style="font-size:22px;font-weight:700;margin-top:2px">${S.refs.reduce((n,r)=>n+r.qty, 0)}</div></div>
           <div style="flex:1"><div class="over">Références actives</div><div class="num" style="font-size:22px;font-weight:700;margin-top:2px">${S.refs.length}</div></div>
@@ -3394,7 +3388,6 @@ function render(){
         const isMatch = rs.some(x=>matchIds.includes(x.id));
         const dimmed = searching && !isMatch;
         const totalQty = rs.reduce((n,x)=>n+x.qty, 0);
-        const bas = rs.some(x=>x.qty <= SEUIL_STOCK_BAS_TEL);
         const classes = ["cell", !r ? "empty" : "", isSel ? "sel" : "", isMatch ? "hit" : "", dimmed ? "dim" : "", assigning ? "assign" : ""].filter(Boolean).join(" ");
         const libelle = r ? r.brand+" "+r.model+(rs.length>1?" et "+(rs.length-1)+" autre"+(rs.length>2?"s":""):"")+", "+totalQty+" unité"+(totalQty>1?"s":"")
                           : "Casier libre";
@@ -3421,7 +3414,6 @@ function render(){
           })}>
           <span style="display:flex;align-items:center;gap:6px">
             <span class="mono" style="font-size:12px;color:var(--muted)">${esc(sh+"·"+c)}</span>
-            ${bas ? `<span title="Stock bas" style="width:7px;height:7px;border-radius:999px;background:var(--warn);margin-left:auto"></span>` : ""}
           </span>
           ${r ? `<span style="display:block;min-width:0">
             <span style="display:block;font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(r.model)}${rs.length>1?" +"+(rs.length-1):""}</span>
@@ -3442,7 +3434,6 @@ function render(){
       const pl = place[sel.id];
       const fixed = !!S.assignments[sel.id];
       const cohab = pl ? S.refs.filter(x=>place[x.id] && place[x.id].loc===pl.loc) : [sel];
-      const bas = sel.qty <= SEUIL_STOCK_BAS_TEL;
       const ligneSous = (pastille, haut, bas2, droite, actions)=>`
         <div style="padding:10px 12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px">
           <span style="width:6px;height:6px;flex:none;border-radius:50%;background:${pastille};display:block"></span>
@@ -3478,10 +3469,9 @@ function render(){
           <div style="font-size:12.5px;color:var(--muted);margin-top:2px">${pl ? "Armoire "+esc(pl.cab)+" · étagère "+esc(pl.shelf.slice(1))+" · casier "+esc(pl.col.slice(1)) : "Aucun casier disponible"}</div>
         </div>
         <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
-          <div style="padding:12px;border-radius:10px;background:var(--raised)"><div class="over">En casier</div><div class="num" style="font-size:24px;font-weight:700${bas?";color:var(--warn)":""}">${sel.qty}</div></div>
+          <div style="padding:12px;border-radius:10px;background:var(--raised)"><div class="over">En casier</div><div class="num" style="font-size:24px;font-weight:700">${sel.qty}</div></div>
           <div style="padding:12px;border-radius:10px;background:var(--raised)"><div class="over">Réservées</div><div class="num" style="font-size:24px;font-weight:700${sel.reserved?";color:var(--warn)":""}">${sel.reserved}</div></div>
         </div>
-        ${bas ? `<div class="badge b-warn" style="align-self:flex-start">Stock bas</div>` : ""}
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;color:var(--muted)">
           <span>${fixed?"Casier choisi à la main":"Casier attribué automatiquement"}</span>
           ${fixed?`<button class="btn btn-sm" ${on(()=>agir("armoire.liberer",{refId:sel.id}))}>Libérer le casier</button>`:""}
@@ -3570,7 +3560,6 @@ function render(){
           <div style="display:flex;flex-wrap:wrap;gap:8px 20px;margin-top:16px;font-size:12.5px;color:var(--muted)">
             <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:4px;background:var(--raised);border:1px solid var(--line)"></span>Occupé</span>
             <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:4px;border:1px dashed var(--muted)"></span>Libre</span>
-            <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:999px;background:var(--warn)"></span>Stock bas (${SEUIL_STOCK_BAS_TEL} u. ou moins)</span>
             <span style="display:inline-flex;align-items:center;gap:8px"><span style="width:14px;height:14px;border-radius:4px;background:var(--gold-soft);border:1px solid var(--gold)"></span>Résultat de recherche</span>
           </div>
         </section>

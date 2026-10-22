@@ -574,7 +574,7 @@ function seed(){
     form:null, opMode:null, opForm:null,
     matReceptForm:null, matResForm:null, matBatch:null, releaseForm:null, editMission:null,
     packEdit:null, packBorrow:null,
-    userMenu:false, possessions:false, possessionsTab:"dotation", stockPhonePage:0, stockPhonePageSize:"auto", stockMaterialPage:0, stockMaterialPageSize:"auto", adminTab:"phones", adminPhoneQuery:"", adminMaterialQuery:"", adminMissionQuery:"", adminPhonePage:0, adminMaterialPage:0, adminConsoPage:0, consoOuverts:{}, profilDe:null, reglagesOuverts:false, profilEdition:false, profilWidgets:null, pret:{recues:[],emises:[],prets:[],sacs:{},missions:[],recuesGroupe:[]}, pretsExternes:[], pretExtForm:null, packFiltre:"tous", packsTout:false, prepMode:false, prep:null, creationMission:false, pieces:[], stockVue:"telephones", pieceQ:"", pieceType:"Toutes", pieceModele:"", pieceForm:null, pieceMvt:null, _mEquipes:[], _mEquipeNom:"", plancherMissions:{}, gestionMissions:{}, annuaire:[], moi:{role:"effectif",chef:"",effectifs:[]}, comptesRoles:{}, sbOuvert:false, missionFormOuvert:false, armoireEdition:false, groupes:[], groupeEdit:null, sacMembre:null, _mGestion:null, demandePret:null, refusPret:null, _mDemandes:[], adminPhoneSize:20, adminMaterialSize:20, adminConsoSize:20, adminMissionPage:0, adminTemplateQuery:"", adminTemplatePage:0, templateEdit:null, adminConsoQuery:"",
+    userMenu:false, possessions:false, possessionsTab:"dotation", stockPhonePage:0, stockPhonePageSize:"auto", stockMaterialPage:0, stockMaterialPageSize:"auto", adminTab:"phones", adminPhoneQuery:"", adminMaterialQuery:"", adminMissionQuery:"", adminPhonePage:0, adminMaterialPage:0, adminConsoPage:0, consoOuverts:{}, profilDe:null, reglagesOuverts:false, profilEdition:false, profilWidgets:null, pret:{recues:[],emises:[],prets:[],sacs:{},missions:[],recuesGroupe:[]}, pretsExternes:[], pretExtForm:null, packFiltre:"tous", packsTout:false, prepMode:false, prep:null, creationMission:false, pieces:[], compteNouveau:null, stockVue:"telephones", pieceQ:"", pieceType:"Toutes", pieceModele:"", pieceForm:null, pieceMvt:null, _mEquipes:[], _mEquipeNom:"", plancherMissions:{}, gestionMissions:{}, annuaire:[], moi:{role:"effectif",chef:"",effectifs:[]}, comptesRoles:{}, sbOuvert:false, missionFormOuvert:false, armoireEdition:false, groupes:[], groupeEdit:null, sacMembre:null, _mGestion:null, demandePret:null, refusPret:null, _mDemandes:[], adminPhoneSize:20, adminMaterialSize:20, adminConsoSize:20, adminMissionPage:0, adminTemplateQuery:"", adminTemplatePage:0, templateEdit:null, adminConsoQuery:"",
     identForm:null, lotForm:null,
     adminCompteQuery:"", adminComptesActifs:false, adminComptesInactifs:false, adminComptesRole:"", fiche:null, motDePasseProvisoire:null, dotationEdit:null, attributionEdit:null,
     _mChoix:{}, _mDeplie:{}, missionChecks:{}
@@ -1634,6 +1634,41 @@ async function basculerEtat(compte, actif){
 async function reinitialiserMotDePasse(compte){
   if(!confirm("Réinitialiser le mot de passe de « "+compte+" » ?\nUn mot de passe provisoire sera affiché une seule fois, et ses sessions ouvertes se fermeront.")) return;
   await agir("compte.mot_de_passe", {compte});
+}
+
+/* Créer un compte : l'identifiant, et un groupe si on le souhaite. Le serveur tire un mot de passe
+   provisoire, que la fiche du nouveau compte affiche une seule fois. */
+function ficheNouveauCompte(f){
+  const fermer = ()=>setT({compteNouveau:null});
+  const valide = /^[\w.@+-]+$/.test((f.identifiant||"").trim());
+  const creer = async ()=>{
+    const id = (f.identifiant||"").trim();
+    if(!valide){ syncNote("Identifiant : lettres, chiffres et . _ - @ + seulement."); return; }
+    if(await agir("compte.creer", {compte:id, groupe:f.groupe||""}))
+      setT({compteNouveau:null, fiche:{compte:id, rattacher:""}});
+  };
+  return `
+  <div class="modal-back" ${on(e=>{ if(e.target.classList.contains("modal-back")) fermer(); })}>
+    <div class="modal" role="dialog" aria-modal="true" style="width:480px">
+      <div class="modal-head"><span class="modal-title">Nouveau compte</span>
+        <span class="modal-sub">Un mot de passe provisoire est généré : la personne devra le remplacer à sa première connexion.</span></div>
+      <div class="modal-body" style="gap:14px;padding:20px 24px">
+        <label class="field"><span class="klabel">IDENTIFIANT</span>
+          <input class="inp" data-k="nc-id" maxlength="150" autocomplete="off" placeholder="Ex. Alice, a.martin, Compte-014" value="${esc(f.identifiant||"")}" ${oni(e=>{ f.identifiant = e.target.value; render(); })}>
+          <span style="font:400 12px/1.4 Inter,system-ui,sans-serif;color:${(f.identifiant||"").trim()&&!valide?"var(--danger)":"var(--muted)"}">Lettres, chiffres et . _ - @ + ; ni espace ni barre oblique.</span></label>
+        <label class="field"><span class="klabel">GROUPE <span style="color:var(--muted);font-weight:400;letter-spacing:0">(facultatif)</span></span>
+          <select class="inp" data-k="nc-groupe" ${ong(e=>{ f.groupe = e.target.value; })}>
+            <option value=""${f.groupe?"":" selected"}>— aucun groupe</option>
+            ${(S.groupes||[]).map(g=>`<option value="${g.id}"${String(f.groupe)===String(g.id)?" selected":""}>${esc(g.nom)}</option>`).join("")}
+          </select></label>
+        <span style="font:400 12px/1.4 Inter,system-ui,sans-serif;color:var(--muted)">Le compte est créé comme effectif. Un chef ou un adjoint se nomme ensuite depuis le groupe.</span>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-sec" ${on(fermer)}>Annuler</button>
+        <button class="btn-pri${(f.identifiant||"").trim()&&valide?"":" off"}" ${on(creer)}>Créer le compte</button>
+      </div>
+    </div>
+  </div>`;
 }
 
 /* Un groupe vu par l'administrateur : on le crée sans chef, on y place des membres,
@@ -2731,7 +2766,8 @@ function carteComptesAdmin(){
       <div style="display:flex;flex-direction:column;gap:3px">
         <h2 style="margin:0;font-size:15px;font-weight:700">Comptes</h2><p style="margin:2px 0 0;font-size:12.5px;color:var(--muted)">${detenu.size} compte${detenu.size>1?"s":""} · ${avec} ${avec>1?"détiennent":"détient"} quelque chose · ${unites} unité${unites>1?"s":""} en circulation</p>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <button class="btn btn-sm btn-primary" type="button" ${on(()=>setT({compteNouveau:{identifiant:"", groupe:""}}))}>+ Nouveau compte</button>
         ${chip("Tous", !S.adminComptesRole, ()=>setT({adminComptesRole:""}))}
         ${chip("Admins", S.adminComptesRole==="admin", ()=>setT({adminComptesRole:"admin"}))}
         ${chip("Chefs", S.adminComptesRole==="chef de groupe", ()=>setT({adminComptesRole:"chef de groupe"}))}
@@ -3528,6 +3564,7 @@ function render(){
 
     body = `
     <div style="flex:1;min-height:0;padding:20px 32px 40px;display:flex;flex-direction:column;gap:20px;min-width:0;overflow:auto">
+      ${ongletsStock()}
       ${sectionATraiter}
 
       <div role="group" aria-label="Filtrer par marque" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
@@ -4167,7 +4204,7 @@ function render(){
       </div>`).join("");
 
     body = `
-    <div style="flex:1;min-height:0;padding:20px 32px 40px;display:flex;flex-direction:column;gap:20px;min-width:0;overflow:auto">
+    <div style="flex:1;min-height:0;padding:20px 32px 40px;display:flex;flex-direction:column;gap:20px;min-width:0;overflow:${S.adminTab==="templates"&&S.templateEdit?"hidden":"auto"}">
       <div class="tabs" role="tablist" aria-label="Rubriques">
         ${ongletsAdmin.map(([cle, libelle, n])=>`<button class="tab${S.adminTab===cle?" on":""}" role="tab" aria-selected="${S.adminTab===cle}" type="button" ${on(()=>setT({adminTab:cle}))}>${libelle} <span class="n">${n}</span></button>`).join("")}
       </div>
@@ -5248,6 +5285,7 @@ function render(){
 
   if(S.fiche && ADMIN) modals += ficheCompte(S.fiche);
   if(S.groupeEdit && ADMIN) modals += ficheGroupe(S.groupeEdit);
+  if(S.compteNouveau && ADMIN) modals += ficheNouveauCompte(S.compteNouveau);
   if(S.sacMembre && S.page==="groupe") modals += fenetreSacMembre(S.sacMembre);
 
   /* Fiche d'une pièce détachée : ses informations, et les modèles auxquels elle convient. */

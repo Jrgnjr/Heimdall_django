@@ -62,6 +62,7 @@ ACTIONS_ADMINISTRATEUR = {
     "groupe.modifier",
     "groupe.supprimer",
     "groupe.membre",
+    "compte.creer",
     "compte.etat",
     "compte.mot_de_passe",
     "compte.recuperation",

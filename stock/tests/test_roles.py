@@ -953,3 +953,61 @@ class UnAdjointAuGroupe(Base):
         d = navigateur.get(reverse("api_state")).json()
         self.assertEqual(d["moi"]["groupe"]["adjoint"], "Eff1")
         self.assertEqual(d["moi"]["effectifs"], ["Eff2"])
+
+
+# ============================================================================ créer un compte
+
+class CreerUnCompte(Base):
+
+    def creer(self, **p):
+        params = dict(p)
+        resume, _ = executer("compte.creer", "Admin", params, True)
+        return resume, params
+
+    def test_un_administrateur_cree_un_compte_avec_mot_de_passe_provisoire(self):
+        _, params = self.creer(compte="Nouveau")
+        c = Compte.objects.get(pk="Nouveau")
+        self.assertTrue(c.actif and c.doit_changer and not c.administrateur)
+        self.assertEqual(c.role, "effectif")
+        provisoire = params.get("_secret")
+        self.assertEqual(len(provisoire), 12)
+        self.assertTrue(c.check_password(provisoire))
+        self.assertTrue(ActiviteCompte.objects.filter(action="compte créé", nouveau_nom="Nouveau").exists())
+
+    def test_le_nouveau_compte_peut_se_connecter_puis_doit_changer_son_mot_de_passe(self):
+        _, params = self.creer(compte="Nouveau")
+        navigateur = Client()
+        self.assertTrue(navigateur.login(identifiant="Nouveau", password=params["_secret"]))
+        self.assertTrue(Compte.objects.get(pk="Nouveau").doit_changer)
+
+    def test_creer_dans_un_groupe(self):
+        self.creer(compte="Nouveau", groupe=self.g1.pk)
+        self.assertEqual(Compte.objects.get(pk="Nouveau").membre_de_id, self.g1.pk)
+
+    def test_groupe_inconnu(self):
+        self.refus("compte.creer", "Admin", compte="Nouveau", groupe=999999)
+        self.assertFalse(Compte.objects.filter(pk="Nouveau").exists())
+
+    def test_un_identifiant_existant_est_refuse_sans_tenir_compte_de_la_casse(self):
+        self.assertIn("existe déjà", self.refus("compte.creer", "Admin", compte="eff1"))
+
+    def test_identifiants_invalides(self):
+        for mauvais in ("Jean Dupont", "a/b", "x?y", "  "):
+            self.refus("compte.creer", "Admin", compte=mauvais)
+        self.assertFalse(Compte.objects.filter(pk="Jean Dupont").exists())
+
+    def test_reserve_aux_administrateurs(self):
+        for qui in ("Chef1", "Eff1"):
+            with self.assertRaises(ErreurAction) as capture:
+                executer("compte.creer", qui, {"compte": "Pirate"}, False)
+            self.assertIn("réservée aux administrateurs", str(capture.exception))
+        self.assertFalse(Compte.objects.filter(pk="Pirate").exists())
+
+    def test_le_mot_de_passe_n_entre_pas_dans_l_historique(self):
+        navigateur = self.ouvrir("Admin")
+        reponse = self.poster(navigateur, "compte.creer", compte="Nouveau")
+        self.assertEqual(reponse.status_code, 200)
+        secret = reponse.json()["secret"]
+        from stock.models import Operation
+        historique = "".join(str(o.parametres) + o.resume for o in Operation.objects.all())
+        self.assertNotIn(secret, historique)

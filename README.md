@@ -523,7 +523,7 @@ stock/             le métier
   api.py             /api/state, /api/action, /api/reglages
   etat.py            modèles → JSON pour l'interface (complet ou différentiel)
   views.py           la page, le tableau de bord d'une mission, /sante/
-  services/          les actions métier (70)
+  services/          les actions métier (71)
     __init__.py        registre des actions, droits, executer()
     champs.py          validation des paramètres, messages de refus
     journaux.py        écriture dans les journaux
@@ -534,7 +534,7 @@ stock/             le métier
     droits.py          rôles : qui a le droit de quoi, contrôle de chaque action
     roles.py           groupes, état, mot de passe et code de récupération d'un compte (admin)
     prets.py           demandes, acceptation, refus, prêts forcés
-  tests/             681 tests
+  tests/             691 tests
 templates/         index.html (l'interface), mission.html, pages de comptes
 static/            icône, logo
 docker/            point d'entrée du conteneur
@@ -676,7 +676,7 @@ de l'image, et ce qui fait attendre le service `web` que la base soit prête.
 python manage.py test stock        # nécessite une base PostgreSQL joignable (DATABASE_URL)
 ```
 
-**681 tests**, qui couvrent les règles métier domaine par domaine, le contrat HTTP de
+**691 tests**, qui couvrent les règles métier domaine par domaine, le contrat HTTP de
 l'API et le déploiement. Ils vérifient en particulier ce qui ne se voit pas à l'œil
 nu :
 

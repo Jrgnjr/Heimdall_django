@@ -11,6 +11,7 @@ Django : c'est le rôle qui donne tous les droits, et il ne se distribue pas dep
 l'écran du stock.
 """
 
+import re
 import secrets
 
 from django.db.models import Q
@@ -237,6 +238,40 @@ def groupe_membre(utilisateur, p):
     ActiviteCompte.objects.create(acteur=utilisateur, action="groupe : membre ajouté",
                                   ancien_nom=g.nom, nouveau_nom=cible.identifiant)
     return "« %s » rejoint le groupe « %s »" % (cible.identifiant, g.nom), []
+
+
+# Lettres, chiffres et . _ - @ + : l'identifiant sert d'adresse (/u/<compte>/) et de nom de cookie.
+_IDENTIFIANT = re.compile(r"^[\w.@+-]+$")
+
+
+@action("compte.creer")
+def compte_creer(utilisateur, p):
+    """Crée un compte utilisateur, éventuellement dans un groupe.
+
+    Le compte naît **effectif**, actif, avec un mot de passe provisoire tiré au hasard et
+    rendu à l'administrateur **une seule fois** (clé `_secret`, comme pour la réinitialisation) :
+    la personne devra le remplacer à sa première connexion. Un administrateur ne se crée pas
+    d'ici : ce rôle se règle dans l'administration Django.
+
+    Paramètres : `compte` (l'identifiant), et facultativement `groupe` (identifiant du groupe).
+    """
+    identifiant = texte(p, "compte", maxi=150)
+    if not _IDENTIFIANT.match(identifiant):
+        raise ErreurAction("L'identifiant ne peut contenir que des lettres, des chiffres et "
+                           "les signes . _ - @ + (ni espace, ni barre oblique).")
+    if Compte.objects.filter(identifiant__iexact=identifiant).exists():
+        raise ErreurAction("Le compte « %s » existe déjà." % identifiant)
+    groupe = None
+    if p.get("groupe") not in (None, ""):
+        groupe = _groupe(p.get("groupe"))
+    provisoire = "".join(secrets.choice(_ALPHABET_PROVISOIRE) for _ in range(12))
+    compte = Compte.objects.create_user(identifiant, provisoire, doit_changer=True, actif=True)
+    if groupe is not None:
+        compte.membre_de = groupe
+        compte.save(update_fields=["membre_de"])
+    ActiviteCompte.objects.create(acteur=utilisateur, action="compte créé", nouveau_nom=identifiant)
+    p["_secret"] = provisoire
+    return "Compte « %s » créé%s" % (identifiant, " dans « %s »" % groupe.nom if groupe else ""), []
 
 
 @action("compte.etat")

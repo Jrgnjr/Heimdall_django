@@ -574,7 +574,7 @@ function seed(){
     form:null, opMode:null, opForm:null,
     matReceptForm:null, matResForm:null, matBatch:null, releaseForm:null, editMission:null,
     packEdit:null, packBorrow:null,
-    userMenu:false, possessions:false, possessionsTab:"dotation", stockPhonePage:0, stockPhonePageSize:"auto", stockMaterialPage:0, stockMaterialPageSize:"auto", adminTab:"phones", adminPhoneQuery:"", adminMaterialQuery:"", adminMissionQuery:"", adminPhonePage:0, adminMaterialPage:0, adminConsoPage:0, consoOuverts:{}, profilDe:null, reglagesOuverts:false, profilEdition:false, profilWidgets:null, pret:{recues:[],emises:[],prets:[],sacs:{},missions:[],recuesGroupe:[]}, pretsExternes:[], pretExtForm:null, packFiltre:"tous", packsTout:false, prepMode:false, prep:null, creationMission:false, pieces:[], compteNouveau:null, stockVue:"telephones", pieceQ:"", pieceType:"Toutes", pieceModele:"", pieceForm:null, pieceMvt:null, _mEquipes:[], _mEquipeNom:"", plancherMissions:{}, gestionMissions:{}, annuaire:[], moi:{role:"effectif",chef:"",effectifs:[]}, comptesRoles:{}, sbOuvert:false, missionFormOuvert:false, armoireEdition:false, groupes:[], groupeEdit:null, sacMembre:null, _mGestion:null, demandePret:null, refusPret:null, _mDemandes:[], adminPhoneSize:20, adminMaterialSize:20, adminConsoSize:20, adminMissionPage:0, adminTemplateQuery:"", adminTemplatePage:0, templateEdit:null, adminConsoQuery:"",
+    userMenu:false, possessions:false, possessionsTab:"dotation", stockPhonePage:0, stockPhonePageSize:"auto", stockMaterialPage:0, stockMaterialPageSize:"auto", adminTab:"phones", adminPhoneQuery:"", adminMaterialQuery:"", adminMissionQuery:"", adminPhonePage:0, adminMaterialPage:0, adminConsoPage:0, consoOuverts:{}, profilDe:null, reglagesOuverts:false, profilEdition:false, profilWidgets:null, pret:{recues:[],emises:[],prets:[],sacs:{},missions:[],recuesGroupe:[]}, pretsExternes:[], pretExtForm:null, packFiltre:"tous", packsTout:false, prepMode:false, prep:null, creationMission:false, pieces:[], matEdit:null, compteNouveau:null, stockVue:"telephones", pieceQ:"", pieceType:"Toutes", pieceModele:"", pieceForm:null, pieceMvt:null, _mEquipes:[], _mEquipeNom:"", plancherMissions:{}, gestionMissions:{}, annuaire:[], moi:{role:"effectif",chef:"",effectifs:[]}, comptesRoles:{}, sbOuvert:false, missionFormOuvert:false, armoireEdition:false, groupes:[], groupeEdit:null, sacMembre:null, _mGestion:null, demandePret:null, refusPret:null, _mDemandes:[], adminPhoneSize:20, adminMaterialSize:20, adminConsoSize:20, adminMissionPage:0, adminTemplateQuery:"", adminTemplatePage:0, templateEdit:null, adminConsoQuery:"",
     identForm:null, lotForm:null,
     adminCompteQuery:"", adminComptesActifs:false, adminComptesInactifs:false, adminComptesRole:"", fiche:null, motDePasseProvisoire:null, dotationEdit:null, attributionEdit:null,
     _mChoix:{}, _mDeplie:{}, missionChecks:{}
@@ -3947,6 +3947,7 @@ function render(){
         <div style="display:flex;justify-content:flex-end;align-items:center;gap:4px">
           <span class="acts"><button class="btn btn-sm btn-ghost" type="button" ${on(()=>openMatRes(m))}>Réserver</button></span>
           ${ADMIN ? `<span class="acts${S.menuLigne===idMenu?" ouvert":""}">${menuPlus(idMenu, [
+            {libelle:"Modifier…", fn:()=>openMatEdit(m)},
             {libelle:"Attribuer à une personne", fn:()=>ouvrirAttribution(m)},
             {libelle:"Supprimer…", danger:true, desactive:!!resTotal,
              titre:resTotal ? "Impossible tant que cet article est emprunté" : "", fn:()=>supprimerMateriel(m)},
@@ -5288,6 +5289,49 @@ function render(){
   if(S.compteNouveau && ADMIN) modals += ficheNouveauCompte(S.compteNouveau);
   if(S.sacMembre && S.page==="groupe") modals += fenetreSacMembre(S.sacMembre);
 
+  /* Modifier un article. */
+  if(S.matEdit && ADMIN){
+    const f = S.matEdit;
+    const cats = Array.from(new Set(CATEGORIES_MATERIEL.concat(S.materiel.map(x=>x.cat))));
+    const dongle = (f.cat||"").trim()===CATEGORIE_DONGLE;
+    modals += `
+    <div class="modal-back" ${on(e=>{ if(e.target.classList.contains("modal-back")) setT({matEdit:null}); })}>
+      <div class="modal" role="dialog" aria-modal="true" style="width:520px;max-height:92vh">
+        <div class="modal-head">
+          <span class="modal-title">Modifier l'article</span>
+          <span class="modal-sub">${esc(f.id)}</span>
+        </div>
+        <div class="modal-body" style="overflow:auto">
+          <label class="field"><span class="klabel">NOM</span>
+            <input class="inp" data-k="me-nom" maxlength="200" value="${esc(f.nom)}" ${oni(e=>{ f.nom=e.target.value; })}>
+            ${f.famille>1 ? `<span style="font:400 12px/1.4 Inter,system-ui,sans-serif;color:var(--muted)">Le nom et la catégorie s'appliquent aux ${f.famille} exemplaires qui portent ce nom.</span>` : ""}</label>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
+            <label class="field"><span class="klabel">CATÉGORIE</span>
+              <input class="inp" data-k="me-cat" list="me-cats" maxlength="80" value="${esc(f.cat)}" ${oni(e=>{ f.cat=e.target.value; render(); })}>
+              <datalist id="me-cats">${cats.map(c=>`<option value="${esc(c)}"></option>`).join("")}</datalist></label>
+            <label class="field"><span class="klabel">AFFECTATION</span>
+              <select class="inp" data-k="me-aff" ${ong(e=>{ f.affectation=e.target.value; })}>
+                ${AFFECTATIONS.map(a=>`<option value="${esc(a)}"${a===f.affectation?" selected":""}>${esc(a)}</option>`).join("")}
+              </select></label>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
+            <label class="field"><span class="klabel">ÉTIQUETTE</span>
+              <input class="inp" data-k="me-etq" maxlength="200" value="${esc(f.etiquette)}" ${oni(e=>{ f.etiquette=e.target.value; })}></label>
+            <label class="field"><span class="klabel">NUMÉRO DE SÉRIE</span>
+              <input class="inp" data-k="me-serie" maxlength="200" value="${esc(f.numeroSerie)}" ${oni(e=>{ f.numeroSerie=e.target.value; })}></label>
+          </div>
+          ${dongle ? `<label class="field"><span class="klabel">FIN DE LICENCE <span style="color:var(--muted);font-weight:400;letter-spacing:0">(facultatif)</span></span>
+            <input class="inp" data-k="me-lic" type="date" value="${esc(f.licence)}" ${oni(e=>{ f.licence=e.target.value; })}></label>` : ""}
+          <span style="font:400 12px/1.4 Inter,system-ui,sans-serif;color:var(--muted)">La quantité se règle dans le tableau, et les mouvements passés gardent le nom qu'avait l'article ce jour-là.</span>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-sec" ${on(()=>setT({matEdit:null}))}>Annuler</button>
+          <button class="btn-pri${(f.nom||"").trim()?"":" off"}" ${on(confirmMatEdit)}>Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
   /* Fiche d'une pièce détachée : ses informations, et les modèles auxquels elle convient. */
   if(S.pieceForm){
     const f = S.pieceForm;
@@ -6423,6 +6467,22 @@ async function sansNumeroDeSerie(){
     S.colFiltres.materiel.cat = "";
     setT({ lotForm:null, matReceptForm:null });
   }
+}
+
+/* Modifier les caractéristiques d'un article. Le nom et la catégorie valent pour tous les
+   exemplaires qui portent le même nom ; le reste est propre à l'exemplaire. */
+function openMatEdit(m){
+  setT({matEdit:{id:m.id||m.name, nom:m.name, cat:m.cat, etiquette:m.etiquette||"", numeroSerie:m.numeroSerie||"",
+                 affectation:m.affectation||"Commun", licence:m.licenceFin||"",
+                 famille:S.materiel.filter(x=>x.name===m.name).length}});
+}
+async function confirmMatEdit(){
+  const f = S.matEdit; if(!f) return;
+  if(!(f.nom||"").trim()){ syncNote("Le nom ne peut pas être vide."); return; }
+  const params = {nom:f.id, libelle:f.nom.trim(), cat:(f.cat||"").trim(), etiquette:(f.etiquette||"").trim(),
+                  numeroSerie:(f.numeroSerie||"").trim(), affectation:f.affectation};
+  if((f.cat||"").trim()===CATEGORIE_DONGLE) params.licence = f.licence||"";
+  if(await agir("materiel.modifier", params)) setT({matEdit:null});
 }
 
 function openIdentForm(m){

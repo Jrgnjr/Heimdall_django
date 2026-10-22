@@ -45,6 +45,7 @@ ACTIONS_ADMINISTRATEUR = {
     "materiel.seuil",
     "materiel.ajuster",
     "materiel.identifiants",
+    "materiel.modifier",
     "materiel.creer.lot",
     "telephone.supprimer",
     "piece.creer",

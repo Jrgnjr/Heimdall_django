@@ -314,6 +314,71 @@ def materiel_identifiants(utilisateur, p):
             [["materiel", m.name]])
 
 
+@action("materiel.modifier")
+def materiel_modifier(utilisateur, p):
+    """Corrige les caractéristiques d'un article : nom, catégorie, étiquette, numéro de
+    série, affectation, fin de licence d'un dongle.
+
+    Deux niveaux, comme à l'écran. Le **nom** et la **catégorie** sont ceux de la famille :
+    tous les exemplaires qui portent le même nom les prennent ensemble, pour qu'ils restent
+    regroupés. L'**étiquette**, le **numéro de série**, l'**affectation** et la **licence**
+    sont propres à l'exemplaire désigné.
+
+    La clé ne bouge jamais : les emprunts, les malettes et les sacs la citent. Les lignes de
+    modèle de mission qui désignent un *type* d'article par son nom suivent le renommage ; le
+    journal garde, lui, le nom qu'avait l'article le jour du mouvement.
+    """
+    from ..models import MissionTemplateItem
+
+    m = article(texte(p, "nom", maxi=200))
+    ancien = m.nom_affiche
+    nouveau = texte(p, "libelle", maxi=200) if p.get("libelle") not in (None, "") else ancien
+    cat = texte(p, "cat", obligatoire=False, defaut=m.cat, maxi=80)
+    etiquette = texte(p, "etiquette", obligatoire=False, maxi=200)
+    serie = texte(p, "numeroSerie", obligatoire=False, maxi=200)
+    affect = affectation(p, obligatoire=True) if p.get("affectation") else m.affectation
+    licence = licence_saisie(p)
+
+    famille = par_libelle(ancien)
+    # Aucun numéro de série ne doit se retrouver en double sous le nouveau nom, et aucun
+    # exemplaire ne doit devenir le sosie exact d'un autre.
+    for f in famille:
+        f_serie = serie if f.name == m.name else f.numero_serie
+        f_etiq = etiquette if f.name == m.name else f.etiquette
+        _serie_libre(nouveau, f_serie, sauf=f.name)
+        sosie = identifie(nouveau, f_etiq, f_serie)
+        if sosie is not None and sosie.name != f.name:
+            raise ErreurAction(
+                "Un exemplaire identique existe déjà sous le nom « %s » (même étiquette, "
+                "même numéro de série)." % nouveau)
+
+    for f in famille:
+        f.libelle = nouveau
+        f.cat = cat
+        champs = ["libelle", "cat"]
+        if f.name == m.name:
+            f.etiquette, f.numero_serie, f.affectation = etiquette, serie, affect
+            champs += ["etiquette", "numero_serie", "affectation"]
+            # Seul un dongle porte une licence ; une nouvelle date remplace l'ancienne,
+            # et changer de catégorie l'efface.
+            if cat != Material.CATEGORIE_DONGLE:
+                f.licence_fin = None
+            elif "licence" in p:
+                f.licence_fin = licence
+            champs.append("licence_fin")
+        elif cat != Material.CATEGORIE_DONGLE and f.licence_fin is not None:
+            f.licence_fin = None
+            champs.append("licence_fin")
+        f.save(update_fields=champs)
+
+    if nouveau != ancien:
+        MissionTemplateItem.objects.filter(kind="type", libelle__iexact=ancien).update(
+            libelle=nouveau)
+
+    cibles = [["materiel", f.name] for f in famille] + [["templates", ""], ["packs", ""]]
+    return "« %s » modifié" % nouveau, cibles
+
+
 @action("materiel.creer.lot")
 def materiel_creer_lot(utilisateur, p):
     """Enregistre plusieurs exemplaires d'un même article, un par série.

@@ -354,3 +354,65 @@ class LicenceDesDongles(BaseStock):
         self.agir("materiel.creer", nom="Dongle CAO", cat="Dongle", qty=1,
                   licence="2027-03-12")
         self.assertEqual(_materiel_json(self.article("Dongle CAO"))["licenceFin"], "2027-03-12")
+
+
+class ModifierUnArticle(BaseStock):
+    """Nom et catégorie suivent la famille ; le reste est propre à l'exemplaire."""
+
+    def deux_exemplaires(self):
+        self.agir("materiel.creer.lot", nom="Cartouche", cat="Outil", series=["A1", "A2"])
+        return self.article("Cartouche"), self.article("Cartouche #2")
+
+    def test_changer_le_nom_et_la_categorie_touche_toute_la_famille(self):
+        a, b = self.deux_exemplaires()
+        self.agir("materiel.modifier", nom=a.name, libelle="Cartouche encre", cat="Consommable",
+                  numeroSerie="A1", etiquette="", affectation="Commun")
+        a.refresh_from_db(); b.refresh_from_db()
+        self.assertEqual((a.nom_affiche, b.nom_affiche), ("Cartouche encre", "Cartouche encre"))
+        self.assertEqual((a.cat, b.cat), ("Consommable", "Consommable"))
+        self.assertEqual((a.name, b.name), ("Cartouche", "Cartouche #2"))   # les clés ne bougent pas
+
+    def test_serie_etiquette_et_affectation_sont_propres_a_l_exemplaire(self):
+        a, b = self.deux_exemplaires()
+        self.agir("materiel.modifier", nom=a.name, numeroSerie="Z9", etiquette="Bac 3",
+                  affectation="Groupe 1")
+        a.refresh_from_db(); b.refresh_from_db()
+        self.assertEqual((a.numero_serie, a.etiquette, a.affectation), ("Z9", "Bac 3", "Groupe 1"))
+        self.assertEqual((b.numero_serie, b.etiquette, b.affectation), ("A2", "", "Commun"))
+
+    def test_une_serie_deja_prise_est_refusee(self):
+        a, b = self.deux_exemplaires()
+        self.assertIn("déjà porté", self.refus("materiel.modifier", nom=a.name, numeroSerie="A2"))
+        a.refresh_from_db()
+        self.assertEqual(a.numero_serie, "A1")
+
+    def test_renommer_vers_un_nom_qui_creerait_un_sosie_est_refuse(self):
+        self.agir("materiel.creer", nom="Chargeur", cat="Autre", qty=1)
+        self.agir("materiel.creer", nom="Cable", cat="Autre", qty=1)
+        self.assertIn("identique", self.refus("materiel.modifier", nom="Cable", libelle="Chargeur"))
+        self.assertEqual(self.article("Cable").nom_affiche, "Cable")
+
+    def test_la_licence_d_un_dongle_se_corrige_et_s_efface_hors_dongle(self):
+        self.agir("materiel.creer", nom="Dongle CAO", cat="Dongle", qty=1, numeroSerie="D1",
+                  licence="2027-01-01")
+        d = self.article("Dongle CAO")
+        self.agir("materiel.modifier", nom=d.name, numeroSerie="D1", licence="2028-05-05")
+        d.refresh_from_db()
+        self.assertEqual(d.licence_fin.isoformat(), "2028-05-05")
+        self.agir("materiel.modifier", nom=d.name, numeroSerie="D1", cat="Outil")
+        d.refresh_from_db()
+        self.assertIsNone(d.licence_fin)
+
+    def test_les_modeles_de_mission_par_type_suivent_le_renommage(self):
+        from stock.models import MissionTemplate, MissionTemplateItem
+        a, _ = self.deux_exemplaires()
+        from django.utils import timezone
+        t = MissionTemplate.objects.create(name="Kit", owner="x", created_at=timezone.now())
+        MissionTemplateItem.objects.create(template=t, ordre=1, kind="type", libelle="Cartouche", qty=1)
+        self.agir("materiel.modifier", nom=a.name, libelle="Cartouche encre", numeroSerie="A1")
+        self.assertEqual(MissionTemplateItem.objects.get(template=t).libelle, "Cartouche encre")
+
+    def test_reserve_aux_administrateurs(self):
+        a, _ = self.deux_exemplaires()
+        self.assertIn("réservée aux administrateurs", self.refus(
+            "materiel.modifier", _administrateur=False, nom=a.name, libelle="X"))

@@ -40,7 +40,7 @@ Une interface unique, six écrans plus le profil, dans une barre latérale :
 | Écran | Pour quoi faire |
 |---|---|
 | **Profil** | Page d'ouverture : ce que je détiens, mes missions, mes prêts et demandes, mon activité. Une disposition en *widgets* que chacun compose |
-| **Stock de téléphone** | Références, déclinaisons, quantités ; sortir, réserver, ajouter |
+| **Stock de téléphone** | Références, déclinaisons, quantités ; sortir, réserver, ajouter. Onglet **Pièces détachées** : fiches de pièces (type, réf., modèles compatibles) avec stock, entrées (admin) et sorties (tous), tracées au journal |
 | **Plan de l'armoire** | Où se trouve chaque référence : étagère, casier, placement manuel ou automatique |
 | **Stock de matériel** | Accessoires, outils, ordinateurs, consommables ; emprunter, réserver, attribuer à un sac |
 | **Missions en cours** | Créer et suivre les missions, leur matériel, leur équipe, leur gestion |
@@ -135,8 +135,8 @@ chef qui crée une mission peut la confier à quelqu'un d'autre sans la gérer.
 
 - Un **groupe** est une entité créée par un administrateur, avec ou sans chef (voir
   « Les groupes »). Le chef de groupe est le membre qui le dirige.
-- Sur une même mission, on est **gestionnaire ou membre de l'effectif** (d'une de ses
-  équipes), jamais les deux. On peut gérer une mission et travailler sur une autre.
+- Sur une même mission, on peut être à la fois **gestionnaire** et **membre d'une de ses
+  équipes** : gérer n'empêche pas de travailler sur le terrain.
 
 ### Ce que peut chaque rôle
 
@@ -181,6 +181,17 @@ chef ne dirige qu'un groupe, et un administrateur n'appartient à aucun groupe.
 Sans chef, personne ne répond à la place d'un absent ni ne compose les sacs : seuls les
 administrateurs gèrent le groupe. Supprimer un groupe, ou retirer son chef, ne supprime
 aucun compte : les membres se retrouvent sans groupe (ou sans chef).
+
+Un groupe peut aussi avoir un **adjoint**, autre membre, qui a les mêmes droits que le chef
+sur les effectifs (mais pas sur le chef). Chef et adjoint sont deux personnes différentes, et
+chacun ne dirige ou ne seconde qu'un seul groupe.
+
+**Prêts à l'extérieur.** Un utilisateur déclare du matériel prêté à quelqu'un qui n'a pas de
+compte (profil → « Prêts à l'extérieur »), pendant ou hors mission, avec un commentaire et une
+échéance facultatifs. La déclaration ne touche pas au stock. Passée l'échéance, une alerte
+s'affiche sur le profil du prêteur, de son chef, de son adjoint et des administrateurs, jusqu'au
+retour (marqué par le prêteur, son chef ou son adjoint, ou un administrateur). Le retard est
+calculé à chaque lecture, jamais stocké.
 
 Tout membre d'un groupe (avec ou sans chef) a une page **Mon groupe** dans le menu : les
 membres, ce que chacun détient (sac de dotation et emprunts), et le **matériel affecté au
@@ -512,7 +523,7 @@ stock/             le métier
   api.py             /api/state, /api/action, /api/reglages
   etat.py            modèles → JSON pour l'interface (complet ou différentiel)
   views.py           la page, le tableau de bord d'une mission, /sante/
-  services/          les actions métier (62)
+  services/          les actions métier (70)
     __init__.py        registre des actions, droits, executer()
     champs.py          validation des paramètres, messages de refus
     journaux.py        écriture dans les journaux
@@ -523,7 +534,7 @@ stock/             le métier
     droits.py          rôles : qui a le droit de quoi, contrôle de chaque action
     roles.py           groupes, état, mot de passe et code de récupération d'un compte (admin)
     prets.py           demandes, acceptation, refus, prêts forcés
-  tests/             632 tests
+  tests/             681 tests
 templates/         index.html (l'interface), mission.html, pages de comptes
 static/            icône, logo
 docker/            point d'entrée du conteneur
@@ -665,7 +676,7 @@ de l'image, et ce qui fait attendre le service `web` que la base soit prête.
 python manage.py test stock        # nécessite une base PostgreSQL joignable (DATABASE_URL)
 ```
 
-**632 tests**, qui couvrent les règles métier domaine par domaine, le contrat HTTP de
+**681 tests**, qui couvrent les règles métier domaine par domaine, le contrat HTTP de
 l'API et le déploiement. Ils vérifient en particulier ce qui ne se voit pas à l'œil
 nu :
 

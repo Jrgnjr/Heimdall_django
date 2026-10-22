@@ -3,8 +3,8 @@
 
 Réservé aux administrateurs. Un **groupe** est une entité à part entière : on le crée,
 on y place des membres, et l'on nomme un chef plus tard — ou jamais. Le chef est un
-membre du groupe, et ne dirige qu'un seul groupe ; un compte n'est membre que d'un
-groupe. Les contrôles ci-dessous maintiennent cela.
+membre du groupe, et ne dirige qu'un seul groupe ; il peut avoir un adjoint, autre
+membre, aux droits identiques. Un compte n'est membre que d'un groupe. Les contrôles ci-dessous maintiennent cela.
 
 L'administrateur, lui, n'appartient à aucun groupe et se règle dans l'administration
 Django : c'est le rôle qui donne tous les droits, et il ne se distribue pas depuis
@@ -12,6 +12,8 @@ l'écran du stock.
 """
 
 import secrets
+
+from django.db.models import Q
 
 from comptes import recuperation
 from comptes.models import ActiviteCompte, Compte, Groupe
@@ -69,22 +71,33 @@ def _membre_possible(identifiant):
 def _placer(compte, groupe):
     """Met `compte` dans `groupe` (None : hors de tout groupe).
 
-    Un chef qu'on déplace ou qu'on retire perd la direction de son groupe : on ne
+    Un chef (ou un adjoint) qu'on déplace ou qu'on retire perd sa fonction : on ne
     dirige que le groupe dont on est membre, et jamais sans en être.
     """
-    dirige = Groupe.objects.filter(chef_id=compte.pk).first()
-    if dirige is not None and (groupe is None or dirige.pk != groupe.pk):
-        dirige.chef = None
-        dirige.save(update_fields=["chef"])
+    for champ in ("chef", "adjoint"):
+        dirige = Groupe.objects.filter(**{champ + "_id": compte.pk}).first()
+        if dirige is not None and (groupe is None or dirige.pk != groupe.pk):
+            setattr(dirige, champ, None)
+            dirige.save(update_fields=[champ])
     compte.membre_de = groupe
     compte.save(update_fields=["membre_de"])
 
 
-def _chef_possible(g, identifiant):
+def est_dirigeant(pk):
+    return Groupe.objects.filter(Q(chef_id=pk) | Q(adjoint_id=pk)).exists()
+
+
+def _chef_possible(g, identifiant, role="chef"):
+    """`role` : « chef » ou « adjoint »."""
     c = _membre_possible(identifiant)
-    autre = Groupe.objects.filter(chef_id=c.pk).exclude(pk=g.pk).first()
+    autre = Groupe.objects.filter(Q(chef_id=c.pk) | Q(adjoint_id=c.pk)).exclude(pk=g.pk).first()
     if autre is not None:
         raise ErreurAction("« %s » dirige déjà le groupe « %s »." % (c.identifiant, autre.nom))
+    if role == "chef" and g.adjoint_id == c.pk:
+        raise ErreurAction("« %s » est l'adjoint de ce groupe : retirez-le d'abord de ce "
+                           "rôle." % c.identifiant)
+    if role == "adjoint" and g.chef_id == c.pk:
+        raise ErreurAction("« %s » est déjà le chef de ce groupe." % c.identifiant)
     if c.membre_de_id not in (None, g.pk):
         raise ErreurAction(
             "« %s » est membre du groupe « %s » : retirez-le-en d'abord, ou nommez-le "
@@ -96,16 +109,20 @@ def _chef_possible(g, identifiant):
 def groupe_creer(utilisateur, p):
     """Crée un groupe — avec ou sans chef, avec ou sans membres.
 
-    Paramètres : `nom`, et facultativement `materiel` (« 1 », « 2 », « 3 »), `chef` et
-    `membres` (identifiants). Un groupe vide et sans chef est tout à fait valable : on
+    Paramètres : `nom`, et facultativement `materiel` (« 1 », « 2 », « 3 »), `chef`,
+    `adjoint` et `membres` (identifiants). Un groupe vide et sans chef est tout à fait valable : on
     le remplit ensuite.
     """
     nom = _nom_groupe(p)
     materiel = _materiel(p)
     ident = [texte({"c": m}, "c", maxi=150) for m in (p.get("membres") or [])]
     chef = texte({"c": p.get("chef")}, "c", obligatoire=False, maxi=150)
-    if chef and chef not in ident:
-        ident.append(chef)
+    adjoint = texte({"c": p.get("adjoint")}, "c", obligatoire=False, maxi=150)
+    if adjoint and adjoint == chef:
+        raise ErreurAction("Le chef et l'adjoint doivent être deux personnes différentes.")
+    for r in (chef, adjoint):
+        if r and r not in ident:
+            ident.append(r)
     # Tout est vérifié **avant** de créer : un refus ne laisse pas un groupe à moitié fait.
     candidats = []
     for m in dict.fromkeys(ident):
@@ -113,7 +130,7 @@ def groupe_creer(utilisateur, p):
         if c.membre_de_id is not None:
             raise ErreurAction("« %s » est déjà membre du groupe « %s »."
                                % (c.identifiant, c.membre_de.nom))
-        if m == chef and Groupe.objects.filter(chef_id=c.pk).exists():
+        if m in (chef, adjoint) and est_dirigeant(c.pk):
             raise ErreurAction("« %s » dirige déjà un groupe." % c.identifiant)
         candidats.append(c)
     g = Groupe.objects.create(nom=nom, materiel=materiel)
@@ -122,6 +139,9 @@ def groupe_creer(utilisateur, p):
         if c.identifiant == chef:
             g.chef = c
             g.save(update_fields=["chef"])
+        elif c.identifiant == adjoint:
+            g.adjoint = c
+            g.save(update_fields=["adjoint"])
     ActiviteCompte.objects.create(acteur=utilisateur, action="groupe créé", nouveau_nom=nom)
     return "Groupe « %s » créé" % nom, []
 
@@ -131,7 +151,7 @@ def groupe_modifier(utilisateur, p):
     """Renomme un groupe, change son matériel affecté, nomme ou retire son chef.
 
     Paramètres : `groupe` (identifiant), puis, parmi ceux-ci, ce qui change : `nom`,
-    `materiel` ("" pour aucun), `chef` ("" pour retirer le chef — il reste membre).
+    `materiel` ("" pour aucun), `chef` et `adjoint` ("" pour retirer — il reste membre).
     """
     g = _groupe(p.get("groupe"))
     modifie, details = [], []
@@ -160,6 +180,19 @@ def groupe_modifier(utilisateur, p):
             g.chef = None
             modifie.append("chef")
             details.append("sans chef")
+    if "adjoint" in p:
+        voulu = texte({"c": p["adjoint"]}, "c", obligatoire=False, maxi=150)
+        if voulu:
+            c = _chef_possible(g, voulu, "adjoint")
+            if g.adjoint_id != c.pk:
+                _placer(c, g)
+                g.adjoint = c
+                modifie.append("adjoint")
+                details.append("adjoint : %s" % c.identifiant)
+        elif g.adjoint_id:
+            g.adjoint = None
+            modifie.append("adjoint")
+            details.append("sans adjoint")
     if not modifie:
         return "Groupe « %s » : rien à changer" % g.nom, []
     g.save(update_fields=modifie)
@@ -232,6 +265,7 @@ def compte_etat(utilisateur, p):
                 "laisserait plus personne pour administrer." % cible.identifiant)
         # Un chef désactivé ne dirige plus son groupe, qui reste (avec ses membres).
         Groupe.objects.filter(chef_id=cible.pk).update(chef=None)
+        Groupe.objects.filter(adjoint_id=cible.pk).update(adjoint=None)
     cible.actif = actif
     cible.save(update_fields=["actif"])
     ActiviteCompte.objects.create(

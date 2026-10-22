@@ -307,3 +307,50 @@ class ExemplairesSeries(BaseStock):
                   consommes={cle: 1})
         self.agir("materiel.identifiants", nom=cle, numeroSerie="CAL-9")
         self.assertEqual(self.journal("CONSOMMÉ")[0].identite, "série CAL-1")
+
+
+class LicenceDesDongles(BaseStock):
+    """La fin de licence se saisit à l'entrée d'un dongle."""
+
+    def test_creer_un_dongle_avec_sa_licence(self):
+        self.agir("materiel.creer", nom="Dongle CAO", cat="Dongle", qty=1,
+                  numeroSerie="D-1", licence="2027-03-12")
+        self.assertEqual(self.article("Dongle CAO").licence_fin.isoformat(), "2027-03-12")
+
+    def test_la_licence_est_facultative(self):
+        self.agir("materiel.creer", nom="Dongle CAO", cat="Dongle", qty=1)
+        self.assertIsNone(self.article("Dongle CAO").licence_fin)
+
+    def test_hors_dongle_la_date_est_ignoree(self):
+        self.agir("materiel.creer", nom="Perceuse bis", cat="Outil", qty=1,
+                  licence="2027-03-12")
+        self.assertIsNone(self.article("Perceuse bis").licence_fin)
+
+    def test_recevoir_un_dongle_renouvele_sa_licence(self):
+        self.agir("materiel.creer", nom="Dongle CAO", cat="Dongle", qty=1,
+                  licence="2026-12-31")
+        self.agir("materiel.reception", nom="Dongle CAO", qty=1, licence="2028-01-15")
+        m = self.article("Dongle CAO")
+        self.assertEqual((m.qty, m.licence_fin.isoformat()), (2, "2028-01-15"))
+
+    def test_une_reception_sans_date_garde_la_licence(self):
+        self.agir("materiel.creer", nom="Dongle CAO", cat="Dongle", qty=1,
+                  licence="2026-12-31")
+        self.agir("materiel.reception", nom="Dongle CAO", qty=1)
+        self.assertEqual(self.article("Dongle CAO").licence_fin.isoformat(), "2026-12-31")
+
+    def test_un_lot_de_dongles_partage_la_licence(self):
+        self.agir("materiel.creer.lot", nom="Dongle CAO", cat="Dongle",
+                  series=["A", "B"], licence="2027-06-01")
+        self.assertEqual(Material.objects.filter(
+            libelle="Dongle CAO", licence_fin__isnull=False).count(), 2)
+
+    def test_date_invalide(self):
+        self.refus("materiel.creer", nom="Dongle CAO", cat="Dongle", qty=1,
+                   licence="demain")
+
+    def test_la_licence_est_envoyee_a_l_interface(self):
+        from stock.etat import _materiel_json
+        self.agir("materiel.creer", nom="Dongle CAO", cat="Dongle", qty=1,
+                  licence="2027-03-12")
+        self.assertEqual(_materiel_json(self.article("Dongle CAO"))["licenceFin"], "2027-03-12")

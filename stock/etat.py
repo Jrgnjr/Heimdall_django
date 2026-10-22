@@ -16,7 +16,7 @@ Renvoyer l'état entier à chaque fois coûterait une dizaine de kilo-octets pou
 n'apprendre, presque toujours, que rien n'a bougé.
 """
 
-from .models import (Cabinet, MaterialLog, MaterialReservation, Material,
+from .models import (Cabinet, PiecePhone, MaterialLog, MaterialReservation, Material,
                      Mission, MissionTemplate, Operation, Pack, PhoneModel,
                      PhoneMovement, SlotAssignment, Version)
 from .services.champs import iso
@@ -79,10 +79,18 @@ def _ref_json(ref):
     }
 
 
+def _pieces_json():
+    """Les pièces détachées, avec les identifiants des modèles auxquels elles conviennent."""
+    return [{"id": x.pk, "name": x.name, "type": x.kind, "mpn": x.mpn, "qty": x.qty,
+             "notes": x.notes, "modeles": sorted(m.pk for m in x.modeles.all())}
+            for x in PiecePhone.objects.prefetch_related("modeles")]
+
+
 def _materiel_json(m):
     return {"id": m.name, "name": m.libelle or m.name, "cat": m.cat,
             "affectation": m.affectation, "qty": m.qty, "seuil": m.seuil,
-            "etiquette": m.etiquette, "numeroSerie": m.numero_serie}
+            "etiquette": m.etiquette, "numeroSerie": m.numero_serie,
+            "licenceFin": m.licence_fin.isoformat() if m.licence_fin else ""}
 
 
 def _template_json(t):
@@ -172,6 +180,7 @@ def charger():
                       MissionTemplate.objects.all().prefetch_related("items")],
         "packs": _packs_json(),
         "equipes": equipes_json(),
+        "pieces": _pieces_json(),
     }
     return v, etat
 
@@ -202,7 +211,7 @@ def charger_delta(depuis):
     import json
 
     refs_touchees, materiels_touches, missions_touchees = set(), set(), set()
-    cabinets = assignments = templates = packs = equipes = False
+    cabinets = assignments = templates = packs = equipes = pieces = False
     for op in operations:
         try:
             cibles = json.loads(op.cibles or "[]")
@@ -228,6 +237,8 @@ def charger_delta(depuis):
                 packs = True
             elif genre == "equipes":
                 equipes = True
+            elif genre == "pieces":
+                pieces = True
 
     delta = {}
 
@@ -277,6 +288,9 @@ def charger_delta(depuis):
     # Les équipes suivent les missions : renvoyées entières, comme elles.
     if equipes or missions_touchees:
         delta["equipes"] = equipes_json()
+    # Supprimer un modèle retire aussi son lien avec les pièces.
+    if pieces or refs_touchees:
+        delta["pieces"] = _pieces_json()
 
     # Les journaux s'empilent par le haut : les N lignes de plus petit rang sont
     # exactement les N plus récentes.

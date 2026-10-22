@@ -12,7 +12,7 @@ Une mission peut naître de deux façons, et la distinction compte :
 
 from django.db.models import Max
 
-from ..models import MaterialReservation, Mission
+from ..models import Equipe, MaterialReservation, Mission
 from . import action, journaux
 from .champs import ErreurAction, date_prevue, texte
 from .droits import acteur, exiger_createur
@@ -37,6 +37,7 @@ def mission_creer(utilisateur, p):
     tout. Mieux vaut pas de mission qu'une mission incomplète qu'on croirait
     complète.
     """
+    from .equipes import equipes_saisies
     from .templates import choix_exemplaires, servir_template
 
     exiger_createur(utilisateur, p)
@@ -53,6 +54,11 @@ def mission_creer(utilisateur, p):
     # À la création il n'y a pas encore d'effectif, donc pas de conflit possible.
     gestionnaires = valider_gestionnaires(p.get("gestionnaires") or [utilisateur])
 
+    # Les équipes sont vérifiées avant toute écriture, comme le reste.
+    equipes = equipes_saisies(
+        p.get("equipes"),
+        deja=[e.nom for e in existante.equipes.all()] if existante is not None else ())
+
     quand = date_prevue(p)
     if existante is None:
         ordre = (Mission.objects.aggregate(m=Max("ordre"))["m"] or 0) + 1
@@ -64,12 +70,20 @@ def mission_creer(utilisateur, p):
         existante.owner = existante.owner or utilisateur
         existante.planned_date = quand
         existante.save(update_fields=["is_meta", "owner", "planned_date"])
-    poser_gestionnaires(Mission.objects.get(pk=nom), gestionnaires)
+    mission = Mission.objects.get(pk=nom)
+    poser_gestionnaires(mission, gestionnaires)
+
+    depart = (mission.equipes.aggregate(m=Max("ordre"))["m"] or 0) + 1
+    for rang, (nom_equipe, membres) in enumerate(equipes, depart):
+        equipe = Equipe.objects.create(mission=mission, nom=nom_equipe, ordre=rang)
+        equipe.membres.set(membres)
 
     from .materiel import creer_emprunt
     # Une mission créée avec un template n'a pas encore d'équipe : son matériel
     # arrive donc au niveau de la mission, et se répartit ensuite.
     cibles = [["mission", nom]]
+    if equipes:
+        cibles.append(["equipes", ""])
     for m, quantite in prepare:
         creer_emprunt(m, quantite, nom, utilisateur)
         journaux.materiel("SORTIE", m.nom_affiche, quantite, utilisateur, nom,
@@ -79,6 +93,8 @@ def mission_creer(utilisateur, p):
     resume = "Mission « %s » créée" % nom
     if template_nom:
         resume += " avec le template « %s »" % template_nom
+    if equipes:
+        resume += " et %d équipe%s" % (len(equipes), "s" if len(equipes) > 1 else "")
     return resume, cibles
 
 

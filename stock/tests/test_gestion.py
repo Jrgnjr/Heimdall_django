@@ -144,26 +144,26 @@ class ModifierLaGestion(Base):
                    gestionnaires=["Carole"], _administrateur=True)
 
 
-class GestionnaireOuEffectif(Base):
-    """Soit en gestion, soit en effectif : jamais les deux sur une même mission."""
+class GestionnaireEtEffectif(Base):
+    """Un gestionnaire peut aussi faire partie d'une équipe, et inversement."""
 
     def setUp(self):
         super().setUp()
         self.creer(gestionnaires=["Alice"])
 
-    def test_nommer_gestionnaire_quelqu_un_de_l_effectif_est_refuse(self):
+    def test_nommer_gestionnaire_quelqu_un_de_l_effectif(self):
         self.equipe(membres=["Bob"])
-        message = self.refus("mission.gestion", "Alice", mission="Chantier",
-                             gestionnaires=["Alice", "Bob"])
-        self.assertIn("soit en gestion, soit en effectif", message)
-        self.assertEqual(gestionnaires_de("Chantier"), ["Alice"])
+        self.agir("mission.gestion", "Alice", mission="Chantier",
+                  gestionnaires=["Alice", "Bob"])
+        self.assertEqual(gestionnaires_de("Chantier"), ["Alice", "Bob"])
+        self.assertEqual(effectifs_de("Chantier"), {"Bob"})
 
-    def test_mettre_un_gestionnaire_dans_une_equipe_est_refuse(self):
+    def test_mettre_un_gestionnaire_dans_une_equipe(self):
         self.equipe()
-        message = self.refus("mission.equipe.membres", "Alice", mission="Chantier",
-                             nom="Nord", membres=["Alice"])
-        self.assertIn("soit en gestion, soit en effectif", message)
-        self.assertEqual(effectifs_de("Chantier"), set())
+        self.agir("mission.equipe.membres", "Alice", mission="Chantier",
+                  nom="Nord", membres=["Alice", "Bob"])
+        self.assertEqual(effectifs_de("Chantier"), {"Alice", "Bob"})
+        self.assertEqual(gestionnaires_de("Chantier"), ["Alice"])
 
     def test_un_effectif_ordinaire_peut_etre_ajoute(self):
         self.equipe()
@@ -171,41 +171,15 @@ class GestionnaireOuEffectif(Base):
                   membres=["Bob", "Carole"])
         self.assertEqual(effectifs_de("Chantier"), {"Bob", "Carole"})
 
-    def test_on_peut_changer_de_role_en_quittant_d_abord_l_autre(self):
-        self.equipe(membres=["Bob"])
-        self.agir("mission.equipe.membres", "Alice", mission="Chantier", nom="Nord",
-                  membres=[])
-        self.agir("mission.gestion", "Alice", mission="Chantier",
-                  gestionnaires=["Alice", "Bob"])
-        self.assertEqual(gestionnaires_de("Chantier"), ["Alice", "Bob"])
-
     def test_le_meme_compte_peut_gerer_une_mission_et_etre_effectif_d_une_autre(self):
         self.creer(qui="Carole", nom="Autre", gestionnaires=["Carole"])
         self.equipe(mission="Autre", nom="Sud")
         self.agir("mission.equipe.membres", "Carole", mission="Autre", nom="Sud",
                   membres=["Bob"])
         self.agir("mission.gestion", "Alice", mission="Chantier",
-                  gestionnaires=["Alice", "Bob"])     # Bob gère Chantier, travaille sur Autre
+                  gestionnaires=["Alice", "Bob"])
         self.assertEqual(gestionnaires_de("Chantier"), ["Alice", "Bob"])
         self.assertEqual(effectifs_de("Autre"), {"Bob"})
-
-    def test_un_etat_anterieur_n_est_pas_refuse_retroactivement(self):
-        """Quelqu'un déjà dans l'équipe et déjà gestionnaire (avant la règle) peut
-        y rester quand on modifie le reste."""
-        GestionMission.objects.create(mission_id="Chantier", compte="Bob")
-        e = self.equipe(membres=["Bob"])
-        self.agir("mission.equipe.membres", "Alice", mission="Chantier", nom="Nord",
-                  membres=["Bob", "Carole"])
-        self.assertEqual(set(e.membres.values_list("identifiant", flat=True)),
-                         {"Bob", "Carole"})
-
-    def test_l_ancien_createur_implicite_ne_peut_pas_rejoindre_l_effectif(self):
-        Mission.objects.create(name="Ancienne", ordre=5, is_meta=True, owner="Carole",
-                               archived=False)
-        self.equipe(mission="Ancienne", nom="Est")
-        self.assertIn("gère la mission", self.refus(
-            "mission.equipe.membres", "Carole", mission="Ancienne", nom="Est",
-            membres=["Carole"]))
 
 
 class DroitsSurLesEquipes(Base):

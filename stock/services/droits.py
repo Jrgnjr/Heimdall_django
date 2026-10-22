@@ -62,16 +62,31 @@ def role_de(identifiant):
     return c.role
 
 
+def _groupes_diriges(identifiant):
+    """Les groupes dont ce compte est le chef ou l'adjoint."""
+    return Groupe.objects.filter(Q(chef_id=identifiant) | Q(adjoint_id=identifiant))
+
+
 def est_chef(identifiant):
-    return Groupe.objects.filter(chef_id=identifiant).exists()
+    """Chef **ou adjoint** : les deux ont les droits d'un chef de groupe."""
+    return bool(identifiant) and _groupes_diriges(identifiant).exists()
 
 
 def groupe_de(chef):
-    """Les identifiants des effectifs du groupe que dirige ce chef (lui exclu)."""
+    """Les identifiants des effectifs du groupe que dirige ce chef (ou cet adjoint).
+
+    Lui est exclu ; et l'adjoint n'a pas la main sur le chef.
+    """
     if not chef:
         return set()
-    return set(Compte.objects.filter(membre_de__chef_id=chef).exclude(pk=chef)
-               .values_list("identifiant", flat=True))
+    ids = set()
+    for g in _groupes_diriges(chef):
+        ids |= set(Compte.objects.filter(membre_de=g)
+                   .values_list("identifiant", flat=True))
+        if g.chef_id != chef:
+            ids.discard(g.chef_id)
+    ids.discard(chef)
+    return ids
 
 
 def membres_du_groupe(identifiant):
@@ -101,9 +116,8 @@ def affectation_du_groupe(identifiant):
 
 
 def dans_le_groupe(chef, compte):
-    """`compte` est-il un effectif du groupe que dirige `chef` ?"""
-    return bool(chef) and compte != chef and Compte.objects.filter(
-        pk=compte, membre_de__chef_id=chef).exists()
+    """`compte` est-il un effectif du groupe que dirige `chef` (chef ou adjoint) ?"""
+    return bool(chef) and compte in groupe_de(chef)
 
 
 def chef_de(compte):

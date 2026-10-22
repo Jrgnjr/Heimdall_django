@@ -92,7 +92,7 @@ class ContratAPI(TestCase):
         self.assertTrue(d["admin"])
         attendues = {"refs", "cabinets", "assignments", "movements", "materiel",
                      "matRes", "matLog", "missions", "missionStatus",
-                     "templates", "packs", "equipes"}
+                     "templates", "packs", "equipes", "pieces"}
         self.assertEqual(set(d["state"]), attendues)
 
     def test_rien_n_a_change(self):
@@ -108,13 +108,14 @@ class ContratAPI(TestCase):
         self.assertEqual(d, {"changed": False, "version": 1, "user": "Admin",
                              "admin": True, "comptes": ["Admin"],
                              "reglages": {}, "dotations": {},
+                             "pretsExternes": [],
                              "pret": {"recues": [], "emises": [], "prets": [], "sacs": {},
                                       "missions": [], "recuesGroupe": []},
                              "plancherMissions": {}, "gestionMissions": {},
                              "annuaire": ["Admin"],
                              "moi": {"role": "admin", "chef": "", "effectifs": [], "groupe": None},
                              "comptesRoles": {"Admin": {"role": "admin", "chef": "",
-                                                        "groupe": None, "actif": True,
+                                                        "adjoint": False, "groupe": None, "actif": True,
                                                         "visite": None}},
                              "groupes": []})
 

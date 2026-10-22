@@ -109,6 +109,33 @@ button{cursor:pointer}
 .affect.commun{color:var(--soft);background-color:var(--raised);border:1px solid transparent}
 .affect:hover{border-color:var(--gold)}
 .affect option{background:var(--surface);color:var(--ink)}
+/* Menus déroulants aux couleurs de Heimdall. Le menu natif prend le bleu du système pour
+   l'option survolée ou choisie ; les navigateurs récents laissent le dessiner soi-même
+   (appearance:base-select). Les autres gardent le menu natif, sans changement. */
+select.badge{-webkit-appearance:none;appearance:none}
+select.badge option{background:var(--surface);color:var(--ink)}
+@supports (appearance:base-select){
+  select.inp,select.input,select.affect,select.badge{appearance:base-select}
+  select.badge::picker-icon{display:none}
+  select.inp::picker(select),select.input::picker(select),select.affect::picker(select),select.badge::picker(select){
+    appearance:base-select;background:var(--surface);color:var(--ink);border:1px solid var(--line);
+    border-radius:10px;padding:4px;box-shadow:0 14px 34px rgba(0,0,0,.4);margin-top:4px;
+    max-height:min(360px,60vh)}
+  select.inp::picker-icon,select.input::picker-icon{color:var(--muted);transition:rotate .15s}
+  select.affect::picker-icon{display:none}
+  select.inp:open::picker-icon,select.input:open::picker-icon{rotate:180deg}
+  select.inp:open,select.input:open{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+  select.inp option,select.input option,select.affect option,select.badge option{
+    padding:8px 10px;border-radius:6px;font:400 13px Inter,system-ui,sans-serif;color:var(--ink);
+    background:transparent;display:flex;align-items:center;gap:8px}
+  select.inp option:hover,select.input option:hover,select.affect option:hover,select.badge option:hover,
+  select.inp option:focus-visible,select.input option:focus-visible,select.affect option:focus-visible,select.badge option:focus-visible{
+    background:var(--raised);outline:0}
+  select.inp option:checked,select.input option:checked,select.affect option:checked,select.badge option:checked{
+    background:var(--gold-soft);color:var(--ink)}
+  select.inp option::checkmark,select.input option::checkmark,select.affect option::checkmark,select.badge option::checkmark{color:var(--gold)}
+  select.inp option:disabled,select.input option:disabled{color:var(--muted)}
+}
 
 /* pastilles de filtre */
 .chip{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:transparent;color:var(--soft);font:400 13px/1 Inter,system-ui,sans-serif;cursor:pointer;white-space:nowrap}
@@ -150,7 +177,7 @@ button{cursor:pointer}
 .help{font-size:12px;color:var(--muted);margin:6px 0 0;line-height:1.5}
 /* champs : le champ de recherche porte sa loupe ; .inp reste le champ de formulaire */
 .inp,.input{border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:400 13.5px Inter,system-ui,sans-serif;outline:none}
-.inp{padding:9px 10px}
+.inp{padding:9px 10px;min-width:0;box-sizing:border-box}
 .inp::placeholder,.input::placeholder{color:var(--muted)}
 .inp:focus,.input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
 .champ-recherche{position:relative;display:flex;align-items:center}
@@ -256,7 +283,7 @@ button.card:hover{border-color:var(--muted)}
 
 /* ---------- coque, en-tête de page et mobile ---------- */
 .principal{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
-.contenu{width:100%;max-width:1360px;margin:0 auto;flex:1;min-height:0;display:flex;flex-direction:column}
+.contenu{width:100%;max-width:2000px;margin:0 auto;flex:1;min-height:0;display:flex;flex-direction:column}
 .entete{display:flex;flex-wrap:wrap;align-items:flex-end;gap:16px 24px;padding:28px 32px 8px;flex:none}
 .entete-titre{flex:1 1 280px;min-width:0}
 .entete h1{margin:0;font-size:24px;font-weight:700;letter-spacing:-.015em;line-height:1.2}
@@ -436,6 +463,16 @@ const affectCls = a => a==="Commun" ? "commun" : "groupe";
    liste serait vide sur une base neuve — impossible d'en choisir une. Les
    catégories déjà utilisées viennent s'y ajouter. */
 const CATEGORIES_MATERIEL = ["Stockage", "Dongle", "Outil", "Ordinateur", "Consommable", "Autre"];
+const CATEGORIE_DONGLE = "Dongle";
+/* La fin de licence d'un dongle, dite en clair : sert d'infobulle à l'icône de licence. */
+function libelleLicence(iso){
+  if(!iso) return "";
+  const j = joursDeRetard(iso);
+  const date = jourMoisAn(iso+"T00:00:00");
+  return j > 0 ? "Licence expirée le "+date+" ("+j+" jour"+(j>1?"s":"")+")"
+       : j === 0 ? "La licence expire aujourd'hui ("+date+")"
+       : "Licence valable jusqu'au "+date;
+}
 /* Ce qui se consomme. Un article de cette categorie peut etre declare
    utilise au retour de mission, et ne rentre alors pas au stock. Doit rester
    identique a CATEGORIE_CONSOMMABLE dans coeur/base.py. */
@@ -534,7 +571,7 @@ function seed(){
     form:null, opMode:null, opForm:null,
     matReceptForm:null, matResForm:null, matBatch:null, releaseForm:null, editMission:null,
     packEdit:null, packBorrow:null,
-    userMenu:false, possessions:false, possessionsTab:"dotation", stockPhonePage:0, stockPhonePageSize:"auto", stockMaterialPage:0, stockMaterialPageSize:"auto", adminTab:"phones", adminPhoneQuery:"", adminMaterialQuery:"", adminMissionQuery:"", adminPhonePage:0, adminMaterialPage:0, adminConsoPage:0, consoOuverts:{}, profilDe:null, reglagesOuverts:false, profilEdition:false, profilWidgets:null, pret:{recues:[],emises:[],prets:[],sacs:{},missions:[],recuesGroupe:[]}, plancherMissions:{}, gestionMissions:{}, annuaire:[], moi:{role:"effectif",chef:"",effectifs:[]}, comptesRoles:{}, sbOuvert:false, missionFormOuvert:false, armoireEdition:false, groupes:[], groupeEdit:null, sacMembre:null, _mGestion:null, demandePret:null, refusPret:null, _mDemandes:[], adminPhoneSize:20, adminMaterialSize:20, adminConsoSize:20, adminMissionPage:0, adminTemplateQuery:"", adminTemplatePage:0, templateEdit:null, adminConsoQuery:"",
+    userMenu:false, possessions:false, possessionsTab:"dotation", stockPhonePage:0, stockPhonePageSize:"auto", stockMaterialPage:0, stockMaterialPageSize:"auto", adminTab:"phones", adminPhoneQuery:"", adminMaterialQuery:"", adminMissionQuery:"", adminPhonePage:0, adminMaterialPage:0, adminConsoPage:0, consoOuverts:{}, profilDe:null, reglagesOuverts:false, profilEdition:false, profilWidgets:null, pret:{recues:[],emises:[],prets:[],sacs:{},missions:[],recuesGroupe:[]}, pretsExternes:[], pretExtForm:null, packFiltre:"tous", packsTout:false, prepMode:false, prep:null, creationMission:false, pieces:[], stockVue:"telephones", pieceQ:"", pieceType:"Toutes", pieceModele:"", pieceForm:null, pieceMvt:null, _mEquipes:[], _mEquipeNom:"", plancherMissions:{}, gestionMissions:{}, annuaire:[], moi:{role:"effectif",chef:"",effectifs:[]}, comptesRoles:{}, sbOuvert:false, missionFormOuvert:false, armoireEdition:false, groupes:[], groupeEdit:null, sacMembre:null, _mGestion:null, demandePret:null, refusPret:null, _mDemandes:[], adminPhoneSize:20, adminMaterialSize:20, adminConsoSize:20, adminMissionPage:0, adminTemplateQuery:"", adminTemplatePage:0, templateEdit:null, adminConsoQuery:"",
     identForm:null, lotForm:null,
     adminCompteQuery:"", adminComptesActifs:false, adminComptesInactifs:false, adminComptesRole:"", fiche:null, motDePasseProvisoire:null, dotationEdit:null, attributionEdit:null,
     _mChoix:{}, _mDeplie:{}, missionChecks:{}
@@ -542,7 +579,7 @@ function seed(){
 }
 
 /* données partagées entre tous les utilisateurs (serveur) vs préférences locales du poste */
-const SHARED = ["refs","cabinets","assignments","movements","materiel","matRes","matLog","missions","missionStatus","templates","packs","equipes","dotations"];
+const SHARED = ["refs","cabinets","assignments","movements","materiel","matRes","matLog","missions","missionStatus","templates","packs","equipes","dotations","pieces"];
 const PREFS  = ["theme","profilWidgets","colFiltres","brand","cabinet","matCat","logFilter","logScope","showArchived","stockPhonePageSize","stockMaterialPageSize","adminPhoneSize","adminMaterialSize","adminConsoSize"];
 const SERVER = location.protocol === "http:" || location.protocol === "https:";
 
@@ -686,8 +723,9 @@ function oublierPage(){
    l'une d'elles a changé, pour que l'appelant redessine. */
 function appliquerEnveloppe(d){
   const avant = JSON.stringify([S.dotations, S.pret, S.plancherMissions, S.gestionMissions,
-                                S.annuaire, S.moi, S.comptesRoles, S.groupes]);
+                                S.annuaire, S.moi, S.comptesRoles, S.groupes, S.pretsExternes]);
   if(d.dotations) S.dotations = d.dotations;
+  if(d.pretsExternes) S.pretsExternes = d.pretsExternes;
   if(d.pret) S.pret = d.pret;
   if(d.plancherMissions) S.plancherMissions = d.plancherMissions;
   if(d.gestionMissions) S.gestionMissions = d.gestionMissions;
@@ -696,7 +734,7 @@ function appliquerEnveloppe(d){
   if(d.comptesRoles) S.comptesRoles = d.comptesRoles;
   if(d.groupes) S.groupes = d.groupes;
   return avant !== JSON.stringify([S.dotations, S.pret, S.plancherMissions, S.gestionMissions,
-                                   S.annuaire, S.moi, S.comptesRoles, S.groupes]);
+                                   S.annuaire, S.moi, S.comptesRoles, S.groupes, S.pretsExternes]);
 }
 
 async function agir(nom, params){
@@ -763,7 +801,7 @@ function appliquerDelta(delta){
     if(delta.matRes[nom].length) S.matRes[nom] = delta.matRes[nom];
     else delete S.matRes[nom];
   });
-  ["missions","missionStatus","templates","packs","equipes","cabinets","assignments"].forEach(k=>{
+  ["missions","missionStatus","templates","packs","equipes","cabinets","assignments","pieces"].forEach(k=>{
     if(delta[k]!==undefined) S[k] = delta[k];
   });
   if(delta.movementsNouveaux) S.movements = delta.movementsNouveaux.concat(S.movements);
@@ -992,6 +1030,117 @@ function materielBloque(m){
   return (S.matRes[m.id||m.name]||[]).filter(r=>!r.returned)
     .reduce((s,r)=>s+r.qty, 0);
 }
+/* ---------- pièces détachées de téléphones ---------- */
+const TYPES_PIECES = ["Écran", "Batterie", "Connecteur de charge", "Caméra", "Haut-parleur", "Nappe", "Coque", "Autre"];
+function ouvrirPiece(piece){
+  setT({pieceForm: piece
+    ? {id:piece.id, nom:piece.name, type:piece.type, mpn:piece.mpn, notes:piece.notes, qty:0, modeles:piece.modeles.slice(), recherche:""}
+    : {id:null, nom:"", type:TYPES_PIECES[0], mpn:"", notes:"", qty:0, modeles:[], recherche:""}});
+}
+async function enregistrerPiece(){
+  const f = S.pieceForm; if(!f || !(f.nom||"").trim()) return;
+  const base = {nom:f.nom.trim(), type:(f.type||"").trim()||"Autre", mpn:(f.mpn||"").trim(), notes:(f.notes||"").trim(), modeles:f.modeles};
+  const ok = f.id ? await agir("piece.modifier", Object.assign({id:f.id}, base))
+                  : await agir("piece.creer", Object.assign({qty:Math.max(0, Number(f.qty)||0)}, base));
+  if(ok) setT({pieceForm:null});
+}
+function ouvrirMouvementPiece(piece, genre){ setT({pieceMvt:{id:piece.id, genre, qty:1, motif:""}}); }
+async function enregistrerMouvementPiece(){
+  const f = S.pieceMvt; if(!f) return;
+  const qty = Number(f.qty);
+  if(!Number.isInteger(qty) || qty < 1){ syncNote("La quantité doit être un entier positif."); return; }
+  const ok = f.genre==="entree" ? await agir("piece.entree", {id:f.id, qty})
+                                : await agir("piece.sortie", {id:f.id, qty, motif:(f.motif||"").trim()});
+  if(ok) setT({pieceMvt:null});
+}
+function supprimerPiece(piece){
+  if(!confirm("Supprimer la pièce « "+piece.name+" » ?\n\nSa fiche et ses "+piece.qty+" unité(s) en stock seront effacées. Le journal, lui, est conservé.")) return;
+  agir("piece.supprimer", {id:piece.id});
+}
+function modelesDe(ids){
+  return ids.map(id=>S.refs.find(r=>r.id===id)).filter(Boolean).map(r=>r.brand+" "+r.model);
+}
+
+function pagePieces(){
+  const t = (S.pieceQ||"").trim().toLowerCase();
+  const types = Array.from(new Set([...TYPES_PIECES, ...S.pieces.map(x=>x.type)]));
+  const utilises = types.filter(ty=>S.pieces.some(x=>x.type===ty));
+  const filtre = (S.pieceType==="Toutes" || utilises.includes(S.pieceType)) ? S.pieceType : "Toutes";
+  const visibles = S.pieces.filter(x=>{
+    if(filtre!=="Toutes" && x.type!==filtre) return false;
+    if(S.pieceModele && !x.modeles.includes(S.pieceModele)) return false;
+    return !t || (x.name+" "+x.type+" "+x.mpn+" "+x.notes+" "+modelesDe(x.modeles).join(" ")).toLowerCase().includes(t);
+  });
+  const total = S.pieces.reduce((n,x)=>n+x.qty, 0);
+
+  const ligne = x=>{
+    const noms = modelesDe(x.modeles);
+    const idMenu = "piece:"+x.id;
+    return `
+    <div class="row" style="grid-template-columns:minmax(0,1.6fr) minmax(0,2fr) 70px 200px;min-height:56px;box-sizing:border-box">
+      <div style="min-width:0">
+        <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(x.name)}">${esc(x.name)}</div>
+        <div style="font-size:12px;color:var(--muted);display:flex;gap:8px;align-items:center;min-width:0">
+          <span class="badge b-neutral">${esc(x.type)}</span>${x.mpn?`<span class="mono" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.mpn)}</span>`:""}
+        </div>
+      </div>
+      <div style="min-width:0;display:flex;flex-wrap:wrap;gap:4px;align-items:center">
+        ${noms.length ? noms.slice(0,3).map(n=>`<span class="badge b-tag b-info" style="max-width:100%;overflow:hidden;text-overflow:ellipsis">${esc(n)}</span>`).join("")
+          + (noms.length>3?`<span class="badge b-neutral" title="${esc(noms.slice(3).join(", "))}">+${noms.length-3}</span>`:"")
+          : `<span style="font-size:12px;color:var(--muted)">Aucun modèle indiqué</span>`}
+      </div>
+      <div class="num" style="text-align:right;font-weight:600;font-size:15px;${x.qty?"":"color:var(--danger)"}">${x.qty}</div>
+      <div style="display:flex;justify-content:flex-end;align-items:center;gap:4px">
+        <button class="btn btn-sm" type="button" ${x.qty?"":"disabled"} ${on(()=>ouvrirMouvementPiece(x,"sortie"))}>Sortir</button>
+        ${ADMIN ? `<span class="acts${S.menuLigne===idMenu?" ouvert":""}">${menuPlus(idMenu, [
+          {libelle:"Entrée de stock", fn:()=>ouvrirMouvementPiece(x,"entree")},
+          {libelle:"Modifier", fn:()=>ouvrirPiece(x)},
+          {libelle:"Supprimer…", danger:true, fn:()=>supprimerPiece(x)},
+        ])}</span>` : ""}
+      </div>
+    </div>`;
+  };
+
+  return `
+  <div style="flex:1;min-height:0;padding:20px 32px 40px;display:flex;flex-direction:column;gap:16px;min-width:0;overflow:auto">
+    ${ongletsStock()}
+    <div style="display:flex;flex-wrap:wrap;gap:8px 10px;align-items:center">
+      ${["Toutes", ...utilises].map(ty=>chip(ty, ty===filtre, ()=>set({pieceType:ty}))).join("")}
+      <span style="flex:1"></span>
+      <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted)">Compatible avec
+        <select class="inp" data-k="piecemodele" style="padding:6px 8px;font-size:12.5px;max-width:240px" ${ong(e=>setT({pieceModele:e.target.value}))}>
+          <option value=""${!S.pieceModele?" selected":""}>Tous les modèles</option>
+          ${S.refs.map(r=>`<option value="${esc(r.id)}"${S.pieceModele===r.id?" selected":""}>${esc(r.brand+" "+r.model)}</option>`).join("")}
+        </select></label>
+    </div>
+    <section class="card" aria-label="Pièces détachées" style="overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:260px">
+      <div style="overflow-x:auto;flex:1;min-height:0;display:flex;flex-direction:column">
+        <div style="min-width:680px;flex:1;min-height:0;display:flex;flex-direction:column">
+          <div class="row" style="grid-template-columns:minmax(0,1.6fr) minmax(0,2fr) 70px 200px;border-top:0;padding-top:0;padding-bottom:0;flex:none">
+            <span class="th" style="padding:12px 0">Pièce</span><span class="th" style="padding:12px 0">Modèles compatibles</span>
+            <span class="th" style="padding:12px 0;text-align:right">Qté</span><span aria-hidden="true"></span>
+          </div>
+          <div style="overflow:auto;flex:1;min-height:0">${visibles.map(ligne).join("")}</div>
+          ${!visibles.length ? `
+          <div style="padding:46px 16px;text-align:center;display:flex;flex-direction:column;gap:7px">
+            <span style="font-weight:600">${S.pieces.length ? "Aucune pièce ne correspond" : "Aucune pièce détachée référencée"}</span>
+            <span style="font-size:12.5px;color:var(--muted)">${S.pieces.length ? "Vérifiez l'orthographe ou retirez les filtres" : (ADMIN ? "Ajoutez une première pièce avec « + Pièce »." : "Un administrateur les référence.")}</span>
+          </div>` : ""}
+        </div>
+      </div>
+      <div style="padding:12px 20px;border-top:1px solid var(--line);color:var(--muted);font-size:12.5px;flex:none">${visibles.length} sur ${S.pieces.length} pièce${S.pieces.length>1?"s":""} · ${total} unité${total>1?"s":""} en stock</div>
+    </section>
+  </div>`;
+}
+
+/* Les deux vues du stock de téléphone : l'onglet est commun aux deux pages. */
+function ongletsStock(){
+  return `<div class="tabs" role="tablist" style="align-self:flex-start">
+    <button class="tab${S.stockVue!=="pieces"?" on":""}" role="tab" aria-selected="${S.stockVue!=="pieces"}" type="button" ${on(()=>setT({stockVue:"telephones"}))}>Téléphones <span class="n">${S.refs.length}</span></button>
+    <button class="tab${S.stockVue==="pieces"?" on":""}" role="tab" aria-selected="${S.stockVue==="pieces"}" type="button" ${on(()=>setT({stockVue:"pieces"}))}>Pièces détachées <span class="n">${S.pieces.length}</span></button>
+  </div>`;
+}
+
 function supprimerTelephone(r){
   if(telephoneBloque(r)) return;
   const n = r.variants.length;
@@ -1254,7 +1403,7 @@ function editeurTemplate(f){
 
     <div style="padding:14px 16px;border-bottom:1px solid var(--c-23262d);display:flex;flex-direction:column;gap:6px">
       <span class="klabel">NOM DU TEMPLATE</span>
-      <input class="inp" data-k="tplnom" placeholder="Kit chantier, Intervention nuit…" value="${esc(f.nom)}" ${oni(e=>{f.nom=e.target.value;})}>
+      <input class="inp" data-k="tplnom" placeholder="Kit chantier, Intervention nuit…" value="${esc(f.nom)}" ${oni(e=>{f.nom=e.target.value; render();})}>
     </div>
 
     <div style="padding:14px 16px;border-bottom:1px solid var(--c-23262d);display:flex;flex-direction:column;gap:8px">
@@ -1418,7 +1567,7 @@ function avatar(compte, taille){
 function badgeRole(r){
   if(!r) return `<span class="badge mut">SANS COMPTE</span>`;
   if(r.role==="admin") return `<span class="badge info">ADMIN</span>`;
-  if(r.role==="chef de groupe") return `<span class="badge violet">CHEF DE GROUPE</span>`;
+  if(r.role==="chef de groupe") return r.adjoint ? `<span class="badge violet">ADJOINT</span>` : `<span class="badge violet">CHEF DE GROUPE</span>`;
   return `<span class="badge mut">EFFECTIF</span>`;
 }
 
@@ -1529,11 +1678,14 @@ function ficheGroupe(f){
   const libres = Object.keys(S.comptesRoles||{}).filter(c=>{
     const x = S.comptesRoles[c]; return x.role!=="admin" && x.actif && !x.groupe; }).sort();
   const ligne = c=>{
-    const chef = c === g.chef;
+    const chef = c === g.chef, adjoint = c === g.adjoint;
     return `<div style="padding:8px 12px;display:flex;align-items:center;gap:10px">
       ${avatar(c, 28)}
       <span style="flex:1;min-width:0;font:500 12px Inter,system-ui,sans-serif;color:var(--c-eef0f4)">${esc(c)}</span>
-      ${chef ? '<span class="badge violet">CHEF</span>' : `<button class="btn-mini hblue" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:c}))}>Nommer chef</button>`}
+      ${chef ? '<span class="badge violet">CHEF</span>'
+        : `${adjoint ? '<span class="badge violet">ADJOINT</span>'
+              : `<button class="btn-mini hwhite" ${on(()=>agir("groupe.modifier",{groupe:g.id, adjoint:c}))}>Nommer adjoint</button>`}
+           <button class="btn-mini hblue" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:c}))}>Nommer chef</button>`}
       <button class="btn-mini hwhite" ${on(()=>setT({groupeEdit:null, fiche:{compte:c, rattacher:""}}))}>Fiche</button>
       <button class="btn-mini hred" ${on(()=>agir("groupe.membre",{compte:c, groupe:""}))}>Retirer</button>
     </div>`;
@@ -1552,6 +1704,11 @@ function ficheGroupe(f){
             <select class="inp" data-k="gr-chef" style="${sel}" ${ong(e=>agir("groupe.modifier",{groupe:g.id, chef:e.target.value}))}>
               <option value=""${g.chef?"":" selected"}>— sans chef</option>
               ${[...new Set([...g.membres, ...libres])].sort().map(c=>`<option value="${esc(c)}"${g.chef===c?" selected":""}>${esc(c)}${g.membres.includes(c)?"":" (ajouté au groupe)"}</option>`).join("")}
+            </select></label>
+          <label class="field"><span class="klabel">ADJOINT</span>
+            <select class="inp" data-k="gr-adjoint" style="${sel}" ${ong(e=>agir("groupe.modifier",{groupe:g.id, adjoint:e.target.value}))}>
+              <option value=""${g.adjoint?"":" selected"}>— sans adjoint</option>
+              ${[...new Set([...g.membres, ...libres])].filter(c=>c!==g.chef).sort().map(c=>`<option value="${esc(c)}"${g.adjoint===c?" selected":""}>${esc(c)}${g.membres.includes(c)?"":" (ajouté au groupe)"}</option>`).join("")}
             </select></label>
         </div>
         <div class="field" style="gap:7px"><span class="klabel">MEMBRES · ${g.membres.length}</span>
@@ -1606,7 +1763,7 @@ function ficheCompte(f){
     role = bloc("RÔLE ET GROUPE", `${vide("Administrateur : tous les droits, sur toutes les missions. Ce rôle se règle dans l'administration Django (/admin/).")}`);
   }else if(r){
     const g = (S.groupes||[]).find(x=>x.id===r.groupe) || null;
-    const chef = r.role==="chef de groupe";
+    const chef = r.role==="chef de groupe" && !r.adjoint, adjoint = !!r.adjoint;
     role = bloc("RÔLE ET GROUPE", `
       <label class="field" style="gap:5px"><span class="klabel" style="opacity:.8">GROUPE</span>
         <select class="inp" data-k="fr-groupe" style="${sel}" ${ong(e=>agir("groupe.membre",{compte, groupe:e.target.value}))}>
@@ -1617,8 +1774,12 @@ function ficheCompte(f){
         <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
           ${chef ? `<span class="badge violet">CHEF DE « ${esc(g.nom.toUpperCase())} »</span>
             <button class="btn-mini hwhite" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:""}))}>Retirer la direction</button>`
+          : adjoint ? `<span class="badge violet">ADJOINT DE « ${esc(g.nom.toUpperCase())} »</span>
+            <button class="btn-mini hwhite" ${on(()=>agir("groupe.modifier",{groupe:g.id, adjoint:""}))}>Retirer l'adjoint</button>
+            <button class="btn-mini hblue" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:compte}))}>Nommer chef du groupe</button>`
           : `<span class="badge mut">EFFECTIF</span>
-            <button class="btn-mini hblue" title="${g.chef?"Remplace "+esc(g.chef)+" (qui reste membre)":"Ce groupe n'a pas de chef"}" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:compte}))}>Nommer chef du groupe</button>`}
+            <button class="btn-mini hblue" title="${g.chef?"Remplace "+esc(g.chef)+" (qui reste membre)":"Ce groupe n'a pas de chef"}" ${on(()=>agir("groupe.modifier",{groupe:g.id, chef:compte}))}>Nommer chef du groupe</button>
+            <button class="btn-mini hwhite" title="${g.adjoint?"Remplace "+esc(g.adjoint)+" (qui reste membre)":"Ce groupe n'a pas d'adjoint"}" ${on(()=>agir("groupe.modifier",{groupe:g.id, adjoint:compte}))}>Nommer adjoint</button>`}
           <button class="btn-mini hwhite" ${on(()=>setT({groupeEdit:{id:g.id}}))}>Ouvrir le groupe</button>
         </div>
         ${!chef && !g.chef ? vide("Ce groupe n'a pas de chef : seuls les administrateurs le gèrent.") : ""}`
@@ -1794,6 +1955,26 @@ function demandesDeMission(nom){
       .map(d=>Object.assign({}, d, {role:"autre"})),
   ].sort((x,y)=>String(x.iso||"").localeCompare(String(y.iso||"")));
 }
+/* Prêt à quelqu'un qui n'a pas de compte : déclaré, avec une échéance. Passée celle-ci, une
+   alerte s'affiche sur le profil du prêteur, de son chef, de son adjoint et des administrateurs. */
+function ouvrirPretExterne(){
+  setT({pretExtForm:{article:"", query:"", qty:1, emprunteur:"", mission:SANS_MISSION, commentaire:"", echeance:""}});
+}
+async function envoyerPretExterne(){
+  const f = S.pretExtForm; if(!f) return;
+  const qty = Number(f.qty);
+  if(!f.article){ syncNote("Choisissez le matériel prêté."); return; }
+  if(!Number.isInteger(qty) || qty < 1){ syncNote("La quantité doit être un entier positif."); return; }
+  if(!(f.emprunteur||"").trim()){ syncNote("Indiquez à qui le matériel est prêté."); return; }
+  if(await agir("pret.externe.declarer", {article:f.article, qty, emprunteur:f.emprunteur.trim(),
+        mission:f.mission, commentaire:(f.commentaire||"").trim(), echeance:f.echeance||""}))
+    setT({pretExtForm:null});
+}
+function joursDeRetard(echeance){
+  const a = new Date(echeance+"T00:00:00"), b = new Date(aujourdhui()+"T00:00:00");
+  return Math.round((b-a)/86400000);
+}
+
 function ouvrirDemandePret(mode, mission){
   setT({demandePret:{mode, mission:mission||SANS_MISSION, query:"", choix:null, qty:1, motif:""}});
 }
@@ -1998,8 +2179,8 @@ function pageGroupe(){
 
   const membres = g.membres.map(c=>{
     const lignes = possessionsDe(c);
-    return {compte:c, lignes, unites:lignes.reduce((n,l)=>n+l.qty, 0), chef:c===g.chef};
-  }).sort((a,b)=>(b.chef - a.chef) || a.compte.localeCompare(b.compte, "fr"));
+    return {compte:c, lignes, unites:lignes.reduce((n,l)=>n+l.qty, 0), chef:c===g.chef, adjoint:c===g.adjoint};
+  }).sort((a,b)=>(b.chef - a.chef) || (b.adjoint - a.adjoint) || a.compte.localeCompare(b.compte, "fr"));
 
   // Les membres : des vignettes, comme dans l'administration des comptes. Le contenu du
   // sac s'ouvre au clic.
@@ -2009,7 +2190,7 @@ function pageGroupe(){
       ${m.unites?`<span class="badge warn" style="position:absolute;top:9px;right:9px" title="Unités détenues">${m.unites}</span>`:""}
       ${avatar(m.compte, 54)}
       <span style="font:600 12.5px/1.2 Inter,system-ui,sans-serif;color:var(--c-f2f4f8);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.compte)}${m.compte===OPERATOR?'<span style="color:var(--c-6d7480);font-weight:400"> · vous</span>':""}</span>
-      ${m.chef ? '<span class="badge violet">CHEF DE GROUPE</span>' : '<span class="badge mut">EFFECTIF</span>'}
+      ${m.chef ? '<span class="badge violet">CHEF DE GROUPE</span>' : m.adjoint ? '<span class="badge violet">ADJOINT</span>' : '<span class="badge mut">EFFECTIF</span>'}
     </button>`;
 
   /* Les missions en cours qui impliquent au moins un membre du groupe : il la gère,
@@ -2155,7 +2336,7 @@ function fenetreSacMembre(compte){
         ${avatar(compte, 52)}
         <span style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:0">
           <span class="modal-title">${esc(compte)}${compte===OPERATOR?" · vous":""}</span>
-          <span>${chef ? '<span class="badge violet">CHEF DE GROUPE</span>' : '<span class="badge mut">EFFECTIF</span>'}</span>
+          <span>${chef ? '<span class="badge violet">CHEF DE GROUPE</span>' : compte === g.adjoint ? '<span class="badge violet">ADJOINT</span>' : '<span class="badge mut">EFFECTIF</span>'}</span>
         </span>
       </div>
       <div class="modal-body" style="padding:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));overflow:hidden;min-height:0">
@@ -2425,9 +2606,43 @@ function pageProfil(){
         </div>`).join("")}
     </section>`;
 
+  /* Les prêts à des personnes sans compte : les miens, et ceux dont je suis alerté (mon
+     groupe, ou tous pour un administrateur). Un prêt en retard colore la carte. */
+  const carteExterne = ()=>{
+    const tous = S.pretsExternes||[];
+    const ouverts = tous.filter(x=>!x.rendu), rendus = tous.filter(x=>x.rendu);
+    const retards = ouverts.filter(x=>x.enRetard);
+    const peutRendre = x=>ADMIN || x.preteur===OPERATOR || effectifsDuGroupe().includes(x.preteur);
+    const ligne = x=>`
+      <div class="item" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap${x.enRetard?";background:var(--danger-bg)":""}">
+        <div style="flex:1 1 240px;min-width:0">
+          <div style="font-weight:600;overflow-wrap:anywhere">${x.quantite} × ${esc(x.article)} <span style="color:var(--muted);font-weight:400">→ ${esc(x.emprunteur)}</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:3px;overflow-wrap:anywhere">${x.preteur!==OPERATOR?"Prêté par <b style=\"font-weight:600\">"+esc(x.preteur)+"</b> · ":""}${x.mission&&x.mission!==SANS_MISSION?"mission « "+esc(x.mission)+" »":"hors mission"}${x.commentaire?" · « "+esc(x.commentaire)+" »":""}</div>
+        </div>
+        <span style="flex:none;width:250px;display:flex;align-items:center;justify-content:flex-end;gap:8px">
+        ${x.rendu ? `<span class="badge b-ok">Rendu</span>`
+          : x.enRetard ? `<span class="num" style="font-size:12px;color:var(--muted)">à rendre le ${esc(dateCourte(x.echeance))}</span><span class="badge b-danger">En retard · ${joursDeRetard(x.echeance)} j</span>`
+          : x.echeance ? `<span class="badge b-neutral">Avant le ${esc(dateCourte(x.echeance))}</span>` : `<span class="badge b-neutral">Sans échéance</span>`}
+        </span>
+        <span style="flex:none;width:158px;display:flex;align-items:center;justify-content:flex-start;gap:6px">
+        ${!x.rendu && peutRendre(x) ? `<button class="btn btn-sm" ${on(()=>agir("pret.externe.rendre",{id:x.id}))}>Marquer rendu</button>` : ""}
+        ${x.preteur===OPERATOR && !x.rendu ? `<button class="btn btn-sm btn-ghost" title="Retirer cette déclaration (faite par erreur)" aria-label="Retirer la déclaration" ${on(()=>{ if(confirm("Retirer cette déclaration de prêt ?")) agir("pret.externe.supprimer",{id:x.id}); })}>✕</button>` : ""}
+        </span>
+      </div>`;
+    return `
+    <section class="card" aria-label="Prêts à des personnes sans compte" style="flex:none;min-width:0;overflow:hidden${retards.length?";border-color:var(--danger)":""}">
+      <div class="chead"><h2>Prêts à l'extérieur</h2><span class="count">${ouverts.length}</span>
+        ${retards.length ? `<span class="badge b-danger">${retards.length} en retard</span>` : ""}
+        <button class="btn btn-sm btn-ghost" style="color:var(--gold);margin-left:auto" ${on(ouvrirPretExterne)}>+ Déclarer un prêt</button></div>
+      ${retards.length ? `<div class="item" style="color:var(--danger);font-size:13px;font-weight:600">${retards.length>1?retards.length+" prêts n'ont pas été rendus à temps.":"Un prêt n'a pas été rendu à temps."}</div>` : ""}
+      ${ouverts.length ? ouverts.map(ligne).join("") : `<div class="item" style="color:var(--muted);font-size:13px">Aucun prêt à une personne sans compte en cours.</div>`}
+      ${rendus.length ? `<div class="item" style="font-size:12px;color:var(--muted)">Rendus récemment</div>${rendus.map(ligne).join("")}` : ""}
+    </section>`;
+  };
+
   const roleLibelle = moi
     ? (ADMIN ? "Administrateur du stock"
-       : estChefDeGroupe() ? "Chef de groupe · "+effectifsDuGroupe().length+" effectif"+(effectifsDuGroupe().length>1?"s":"")
+       : estChefDeGroupe() ? (S.moi.groupe && S.moi.groupe.adjoint===OPERATOR ? "Adjoint de groupe" : "Chef de groupe")+" · "+effectifsDuGroupe().length+" effectif"+(effectifsDuGroupe().length>1?"s":"")
        : "Effectif"+(S.moi && S.moi.chef ? " · groupe de "+S.moi.chef : ""))
     : (ADMIN ? "Profil consulté par un administrateur" : "Profil d'un effectif de votre groupe");
   const SVG_REGLAGES = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>`;
@@ -2456,6 +2671,7 @@ function pageProfil(){
       <button class="btn btn-sm" type="button" ${on(()=>set({page:"admin", adminTab:"consommables"}))}>Ouvrir les consommables</button>
     </section>` : ""}
 
+    ${moi ? carteExterne() : ""}
     ${(moi && S.pret.recues.length) ? carteDemandes(S.pret.recues, "Demande"+(S.pret.recues.length>1?"s":"")+" de prêt dans votre sac", false) : ""}
     ${(moi && (S.pret.recuesGroupe||[]).length) ? carteDemandes(S.pret.recuesGroupe, "Demande"+((S.pret.recuesGroupe||[]).length>1?"s":"")+" de prêt dans les sacs de votre groupe", true) : ""}
 
@@ -2529,7 +2745,7 @@ function carteComptesAdmin(){
       ${(S.groupes||[]).length ? `<div style="display:flex;flex-wrap:wrap;gap:8px">${S.groupes.map(g=>`
         <button class="btn-sec" style="display:flex;align-items:center;gap:8px;padding:7px 11px" ${on(()=>setT({groupeEdit:{id:g.id}}))}>
           <b style="font:600 12px Inter,system-ui,sans-serif">${esc(g.nom)}</b>
-          <span style="font:400 12px Inter,system-ui,sans-serif;color:var(--c-6d7480)">${g.membres.length} membre${g.membres.length>1?"s":""} · ${g.chef?"chef "+esc(g.chef):"sans chef"}${g.materiel?" · matériel "+g.materiel:""}</span>
+          <span style="font:400 12px Inter,system-ui,sans-serif;color:var(--c-6d7480)">${g.membres.length} membre${g.membres.length>1?"s":""} · ${g.chef?"chef "+esc(g.chef):"sans chef"}${g.adjoint?" · adjoint "+esc(g.adjoint):""}${g.materiel?" · matériel "+g.materiel:""}</span>
         </button>`).join("")}</div>`
       : `<span style="font:400 12px Inter,system-ui,sans-serif;color:var(--c-6d7480)">Aucun groupe : créez-en un, avec ou sans chef.</span>`}
     </div>
@@ -3194,14 +3410,16 @@ function render(){
       <p>${esc(pageSub)}</p>
     </div>
     <div class="entete-actions">
-      ${(S.page==="stock"||S.page==="armoire") ? champRecherche("q", S.page==="armoire" ? "Trouver un modèle, une marque, une réf.…" : "Modèle, marque, réf. fabricant…", S.q, v=>setT({q:v, stockPhonePage:0}), "flex:1 1 260px;max-width:380px") : ""}
+      ${S.page==="stock" && S.stockVue==="pieces" ? champRecherche("pieceq", "Pièce, type, modèle, réf.…", S.pieceQ, v=>setT({pieceQ:v}), "flex:1 1 260px;max-width:380px") : ""}
+      ${(S.page==="armoire" || (S.page==="stock" && S.stockVue!=="pieces")) ? champRecherche("q", S.page==="armoire" ? "Trouver un modèle, une marque, une réf.…" : "Modèle, marque, réf. fabricant…", S.q, v=>setT({q:v, stockPhonePage:0}), "flex:1 1 260px;max-width:380px") : ""}
       ${(S.page==="profil" && (!S.profilDe || S.profilDe===auteurEffectif())) ? `<button class="btn${S.profilEdition?" btn-primary":""}" ${on(()=>setT({profilEdition:!S.profilEdition}))}>${S.profilEdition?"Terminer la personnalisation":"Personnaliser"}</button>
       <button class="btn" ${on(()=>setT({reglagesOuverts:true}))}>Réglages</button>` : ""}
       ${S.page==="journal" ? champRecherche("logq", "Article, étiquette, personne…", S.logQuery, v=>setT({logQuery:v, logPage:0}), "flex:1 1 260px;max-width:380px") : ""}
-      ${S.page==="missions" && peutCreerMission() ? `<button class="btn btn-primary" type="button" aria-expanded="${!!S.missionFormOuvert}" ${on(()=>setT({missionFormOuvert:!S.missionFormOuvert}))}>+ Nouvelle mission</button>` : ""}
+      ${S.page==="missions" && peutCreerMission() ? `<button class="btn btn-primary" type="button" ${on(ouvrirNouvelleMission)}>+ Nouvelle mission</button>` : ""}
       ${(S.page==="missions"||S.page==="journal"||S.page==="admin"||S.page==="profil"||S.page==="groupe") ? "" : `
       ${S.page==="materiel" ? champRecherche("matq", "Article, malette, mission…", S.matQuery, v=>setT({matQuery:v, stockMaterialPage:0}), "flex:1 1 260px;max-width:380px") : ""}
-      ${ADMIN ? `<button class="btn btn-primary" ${on(()=>S.page==="materiel"?openMatReception():openReception())}>${S.page==="materiel"?"+ Entrée matériel":"+ Réception"}</button>` : ""}`}
+      ${S.page==="materiel" ? `<button class="btn${S.prepMode?" btn-primary":""}" type="button" aria-pressed="${!!S.prepMode}" ${on(basculerPreparation)}>${S.prepMode?"← Vue tableau":"Préparer une mission"}</button>` : ""}
+      ${ADMIN ? `<button class="btn btn-primary" ${on(()=>S.page==="materiel"?openMatReception():(S.page==="stock" && S.stockVue==="pieces")?ouvrirPiece():openReception())}>${S.page==="materiel"?"+ Entrée matériel":(S.page==="stock" && S.stockVue==="pieces")?"+ Pièce":"+ Réception"}</button>` : ""}`}
     </div>
   </header>`;
 
@@ -3307,6 +3525,7 @@ function render(){
 
     body = `
     <div style="flex:1;min-height:0;padding:20px 32px 40px;display:flex;flex-direction:column;gap:20px;min-width:0;overflow:auto">
+      ${ongletsStock()}
       ${sectionATraiter}
 
       <div role="group" aria-label="Filtrer par marque" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
@@ -3348,6 +3567,7 @@ function render(){
         </aside>
       </div>
     </div>`;
+    if(S.stockVue==="pieces") body = pagePieces();
   }
 
   /* ---------- page : plan de l'armoire ---------- */
@@ -3581,9 +3801,10 @@ function render(){
     const fc = filtresDe("materiel");
     const reserves = m=>(S.matRes[m.id||m.name]||[]).filter(r=>!r.returned);
     const missionsDe = m=>reserves(m).map(r=>r.mission || SANS_MISSION);
-    const colonnesActives = Object.keys(fc).filter(k=>fc[k]!=="");
+    // La colonne « Article » filtre par catégorie : l'ancien filtre de texte n'a plus d'écran, on
+    // l'ignore plutôt que de laisser un filtre invisible. La recherche de la page cherche les noms.
+    const colonnesActives = Object.keys(fc).filter(k=>k!=="article" && fc[k]!=="");
     const passeColonnes = m=>{
-      if(fc.article && !(m.name+" "+(m.libelle||"")+" "+(m.etiquette||"")+" "+(m.numeroSerie||"")).toLowerCase().includes(fc.article.trim().toLowerCase())) return false;
       if(fc.cat && m.cat !== fc.cat) return false;
       if(fc.affectation && m.affectation !== fc.affectation) return false;
       if(fc.qte==="epuise" && m.qty > 0) return false;
@@ -3668,7 +3889,7 @@ function render(){
         <div style="min-width:0;display:flex;align-items:center;gap:12px">
           ${caseHtml(checked, ()=>{ if(S.matSel[identifiant]) delete S.matSel[identifiant]; else S.matSel[identifiant]=true; render(); }, "Sélectionner "+m.name)}
           <div style="min-width:0">
-            <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</div>
+            <div style="font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}${m.licenceFin ? `<img src="{% static 'stock/licence-logicielle.svg' %}" width="18" height="18" alt="${esc(libelleLicence(m.licenceFin))}" title="${esc(libelleLicence(m.licenceFin))}" tabindex="0" style="vertical-align:-4px;margin-left:8px;cursor:help">` : ""}</div>
             ${m.etiquette||m.numeroSerie?`<div style="font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"><span class="mono">${m.etiquette?esc(m.etiquette):""}${m.etiquette&&m.numeroSerie?" · ":""}${m.numeroSerie?esc(m.numeroSerie):""}</span></div>`:""}
           </div>
         </div>
@@ -3705,7 +3926,15 @@ function render(){
       return (x.name+" "+(x.etiquette||"")+" "+x.owner+" "+contenu).toLowerCase().includes(t);
     });
     const SVG_MALETTE = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V5.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V8M3 13h18"/></svg>`;
-    const cartes = visibles.map(pack=>{
+    /* Beaucoup de malettes : un filtre par état, et seules les premières sont montrées
+       d'emblée — le tableau des articles, dessous, reste à portée de vue. */
+    const PACKS_VISIBLES = 6;
+    const parEtat = {tous:visibles.length, range:0, sorti:0, partiel:0};
+    visibles.forEach(x=>{ parEtat[packEtat(x)]++; });
+    const filtre = parEtat[S.packFiltre]!==undefined ? S.packFiltre : "tous";
+    const filtrees = visibles.filter(x=>filtre==="tous" || packEtat(x)===filtre);
+    const affichees = (S.packsTout || filtrees.length<=PACKS_VISIBLES+1) ? filtrees : filtrees.slice(0, PACKS_VISIBLES);
+    const cartes = affichees.map(pack=>{
       const etat = packEtat(pack);
       const dehors = packSorties(pack.name);
       const manquants = packManquants(pack);
@@ -3744,39 +3973,50 @@ function render(){
       const idMenu = "pack:"+pack.name;
 
       return `
-      <div class="card" style="flex:0 1 460px;min-width:min(100%,320px);overflow:hidden">
-        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:16px 18px">
+      <div class="card" style="min-width:0;overflow:hidden">
+        <div style="display:flex;align-items:center;gap:12px;padding:14px 16px 10px">
           ${selectionnable ? caseHtml(coche, ()=>{ if(S.packSel[pack.name]) delete S.packSel[pack.name]; else S.packSel[pack.name]=true; render(); }, "Sélectionner la malette "+pack.name) : ""}
-          <div style="width:40px;height:40px;border-radius:10px;background:var(--gold-soft);color:var(--gold);display:flex;align-items:center;justify-content:center;flex-shrink:0">${SVG_MALETTE}</div>
-          <div style="flex:1 1 180px;min-width:0">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap"><strong style="overflow-wrap:anywhere">${esc(pack.name)}</strong>${badge}</div>
-            <div style="font-size:12px;color:var(--muted);margin-top:2px">${pack.etiquette?`<span class="mono">${esc(pack.etiquette)}</span> · `:""}${pack.items.length} article${pack.items.length>1?"s":""} · par ${esc(pack.owner)} · emportée d'un seul geste, ne réserve rien</div>
-            ${missions.length?`<div style="font-size:12px;color:var(--info);margin-top:2px">Sortie pour ${esc(missions.join(", "))}</div>`:""}
-            ${etat==="range" && manquants.length?`<div style="font-size:12px;color:var(--danger);margin-top:2px">Incomplète en stock : ${esc(manquants.map(i=>i.libelle).join(", "))}</div>`:""}
+          <div style="width:36px;height:36px;border-radius:10px;background:var(--gold-soft);color:var(--gold);display:flex;align-items:center;justify-content:center;flex-shrink:0">${SVG_MALETTE}</div>
+          <div style="flex:1;min-width:0">
+            <div style="display:flex;align-items:center;gap:8px"><strong style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(pack.name)}">${esc(pack.name)}</strong>${badge}</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${pack.etiquette?`<span class="mono">${esc(pack.etiquette)}</span> · `:""}${pack.items.length} article${pack.items.length>1?"s":""} · par ${esc(pack.owner)}</div>
           </div>
-          <div style="display:flex;gap:6px;align-items:center">
-            ${etat==="range"
-              ? `<button class="btn btn-sm btn-primary${packDisponible(pack)?"":" off"}" type="button"${packDisponible(pack)?"":" disabled"} ${on(()=>{ if(packDisponible(pack)) openPackBorrow(pack); })}>Emprunter</button>`
-              : `<button class="btn btn-sm btn-primary" type="button" ${on(()=>agir("pack.retour",{pack:pack.name}))}>Rendre la malette</button>`}
-            <button class="btn btn-sm" type="button" aria-expanded="${deplie}" ${on(()=>setT({packOuverts:Object.assign({},S.packOuverts,{[pack.name]:!deplie})}))}>${deplie?"Masquer":"Contenu"}</button>
-            ${menuPlus(idMenu, [
-              ...(etat!=="sorti" && pack.items.length ? [{libelle:"Sortir une partie", fn:()=>openPackBorrow(pack, true)}] : []),
-              {libelle:"Modifier", fn:()=>openPackEdit(pack)},
-              {libelle:"Supprimer…", danger:true, desactive:!!dehors.length, titre:dehors.length ? "Impossible tant que la malette est dehors" : "", fn:()=>supprimerPack(pack)},
-            ])}
-          </div>
+          ${menuPlus(idMenu, [
+            ...(etat!=="sorti" && pack.items.length ? [{libelle:"Sortir une partie", fn:()=>openPackBorrow(pack, true)}] : []),
+            {libelle:"Modifier", fn:()=>openPackEdit(pack)},
+            {libelle:"Supprimer…", danger:true, desactive:!!dehors.length, titre:dehors.length ? "Impossible tant que la malette est dehors" : "", fn:()=>supprimerPack(pack)},
+          ])}
+        </div>
+        ${missions.length||(etat==="range" && manquants.length) ? `<div style="padding:0 16px 8px;display:flex;flex-direction:column;gap:2px">
+          ${missions.length?`<div style="font-size:12px;color:var(--info)">Sortie pour ${esc(missions.join(", "))}</div>`:""}
+          ${etat==="range" && manquants.length?`<div style="font-size:12px;color:var(--danger)">Incomplète en stock : ${esc(manquants.map(i=>i.libelle).join(", "))}</div>`:""}
+        </div>` : ""}
+        <div style="display:flex;gap:6px;align-items:center;padding:0 16px 14px">
+          ${etat==="range"
+            ? `<button class="btn btn-sm btn-primary${packDisponible(pack)?"":" off"}" type="button"${packDisponible(pack)?"":" disabled"} ${on(()=>{ if(packDisponible(pack)) openPackBorrow(pack); })}>Emprunter</button>`
+            : `<button class="btn btn-sm btn-primary" type="button" ${on(()=>agir("pack.retour",{pack:pack.name}))}>Rendre la malette</button>`}
+          <button class="btn btn-sm" type="button" aria-expanded="${deplie}" ${on(()=>setT({packOuverts:Object.assign({},S.packOuverts,{[pack.name]:!deplie})}))}>${deplie?"Masquer":"Contenu"}</button>
         </div>
         ${deplie?`<div>${lignes||'<div style="padding:12px 18px;font-size:13px;color:var(--muted);border-top:1px solid var(--line)">Malette vide</div>'}</div>`:""}
       </div>`;
     }).join("");
 
+    const puce = (cle, libelle)=>parEtat[cle] || cle==="tous"
+      ? `<button class="chip${filtre===cle?" on":""}" type="button" aria-pressed="${filtre===cle}" ${on(()=>setT({packFiltre:cle, packsTout:false}))}>${libelle} <span style="color:var(--muted);font-weight:500">${parEtat[cle]}</span></button>` : "";
     const bandePacks = (t && !visibles.length) ? "" : `
-      <section aria-label="Malettes" style="display:flex;flex-wrap:wrap;gap:12px;align-items:stretch">
-        ${cartes}
-        <button class="card" type="button" style="flex:0 1 220px;min-height:74px;display:flex;align-items:center;justify-content:center;gap:8px;border-style:dashed;color:var(--muted);font:inherit;font-size:13px;cursor:pointer;background:transparent" ${on(()=>openPackEdit())}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nouveau pack
-        </button>
-        ${!S.packs.length ? `<span style="flex:1 1 280px;align-self:center;font-size:12.5px;color:var(--muted)">Une malette regroupe plusieurs articles pour les emporter d'un seul geste — un pelicase et son contenu, pris en une fois.</span>` : ""}
+      <section aria-label="Malettes" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px">
+          <h2 style="margin:0;font-size:14px;font-weight:700">Malettes</h2><span class="count">${S.packs.length}</span>
+          ${S.packs.length>1 ? `<span style="display:flex;flex-wrap:wrap;gap:6px;margin-left:6px">${puce("tous","Toutes")}${puce("range","Rangées")}${puce("sorti","Dehors")}${puce("partiel","Incomplètes")}</span>` : ""}
+          <button class="btn btn-sm" type="button" style="margin-left:auto" ${on(()=>openPackEdit())}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nouveau pack</button>
+        </div>
+        ${cartes ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:12px;align-items:start">${cartes}</div>`
+          : `<div class="card" style="padding:16px 18px;font-size:13px;color:var(--muted)">${S.packs.length ? "Aucune malette dans cet état." : "Une malette regroupe plusieurs articles pour les emporter d'un seul geste — un pelicase et son contenu, pris en une fois."}</div>`}
+        ${filtrees.length>affichees.length || (S.packsTout && filtrees.length>PACKS_VISIBLES+1) ? `
+        <div style="display:flex;justify-content:center">
+          <button class="btn btn-sm" type="button" ${on(()=>setT({packsTout:!S.packsTout}))}>${S.packsTout ? "Réduire la liste" : "Afficher les "+(filtrees.length-affichees.length)+" autres malettes"}</button>
+        </div>` : ""}
       </section>`;
 
     const missionsConnues = Array.from(new Set(catalogueCommun.flatMap(missionsDe))).sort((a,b)=>a.localeCompare(b, "fr"));
@@ -3802,7 +4042,7 @@ function render(){
       ${bandePacks}
 
       <div style="display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center">
-        <div style="position:relative;display:flex;align-items:center;gap:10px">${thF("cat", "Catégorie", "padding:0")}${filtreCat}</div>
+        ${filtreCat}
         <span style="flex:1"></span>
         <span style="font-size:12.5px;color:var(--muted)">${nbReserves} article${nbReserves>1?"s":""} réservé${nbReserves>1?"s":""} · ${nbEnMission} en mission</span>
       </div>
@@ -3818,7 +4058,7 @@ function render(){
         <div style="overflow-x:auto;flex:1;min-height:0;display:flex;flex-direction:column">
           <div style="min-width:760px;flex:1;min-height:0;display:flex;flex-direction:column">
             <div class="row" style="grid-template-columns:${MAT_GRID()};border-top:0;padding-top:0;padding-bottom:0;flex:none">
-              ${thF("article", "Article", "padding:12px 0", false, toutEffacer)}
+              ${thF("cat", "Article", "padding:12px 0", false, toutEffacer)}
               ${thF("affectation", "Affectation", "padding:12px 0")}
               ${thF("qte", "Qté", "padding:12px 0", true)}
               ${thF("mission", "En mission", "padding:12px 0")}
@@ -3841,6 +4081,7 @@ function render(){
         </div>` : ""}
       </section>
     </div>`;
+    if(S.prepMode) body = pagePreparation();
   }
 
   /* ---------- page : administration du stock ---------- */
@@ -4071,7 +4312,11 @@ function render(){
             <div style="padding:10px 16px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;border-top:1px solid var(--line);background:var(--raised)">
               <span class="over" style="color:${g.nom?"var(--soft)":"var(--muted)"}">${g.nom?esc(g.nom):"Sans équipe"}</span>
               ${total?`<span class="badge b-warn">${total} u.</span>`:'<span class="badge b-neutral">Vide</span>'}
-              ${g.nom?`<span style="font-size:12px;color:var(--muted);min-width:0;overflow-wrap:anywhere">${g.membres.length?esc(g.membres.join(", ")):"aucun membre"}</span>`:""}
+              ${g.nom?(g.membres.length
+                ? `<span style="display:flex;flex-wrap:wrap;gap:6px;min-width:0">${g.membres.map(m=>{
+                    const n = g.lignes.filter(it=>!it.returned && it.by===m).reduce((t,it)=>t+it.qty, 0);
+                    return `<span class="badge ${n?"b-neutral":"b-warn"}" style="height:auto;padding:3px 8px;text-transform:none;letter-spacing:0" title="${n?esc(m)+" a pris "+n+" unité"+(n>1?"s":""):esc(m)+" n'a encore rien pris"}">${esc(m)} · ${n?n+" u.":"rien"}</span>`; }).join("")}</span>`
+                : `<span style="font-size:12px;color:var(--muted)">aucun membre</span>`):""}
               ${g.nom?`<span style="margin-left:auto;display:flex;gap:4px;align-items:center">
                 ${dehors.length?`<button class="btn btn-sm" ${on(()=>setT({releaseForm:{mission:name, equipe:g.nom, by:"", consommes:{}, commentaire:""}}))}>Restituer</button>`:""}
                 ${gere?menuPlus(idMenu, [
@@ -4092,19 +4337,18 @@ function render(){
           </div>
           ${archived?'<span class="badge b-neutral" style="flex:none">Archivée</span>':""}
           <select class="badge ${stCls}" aria-label="Statut de ${esc(name)}" ${gere?"":"disabled"} title="${gere?"Changer le statut":"Seul un gestionnaire de la mission ou un administrateur change son statut"}"
-            style="flex:none;cursor:${gere?"pointer":"default"};-webkit-appearance:none;appearance:none;padding:0 8px;border:0"
+            style="flex:none;cursor:${gere?"pointer":"default"};padding:0 8px;border:0"
             ${ong(e=>agir("mission.statut", { nom:name, statut:e.target.value }))}>
-            ${["PRÉVUE","EN COURS","TERMINÉE","ANNULÉE"].map(v=>`<option value="${v}"${v===st?" selected":""}${changementStatutPermis(st, v, peutReculerMission(name))?"":" disabled"} style="background:var(--surface);color:var(--ink)">${v}</option>`).join("")}
+            ${["PRÉVUE","EN COURS","TERMINÉE","ANNULÉE"].map(v=>`<option value="${v}"${v===st?" selected":""}${changementStatutPermis(st, v, peutReculerMission(name))?"":" disabled"}>${v}</option>`).join("")}
           </select>
         </div>
         ${demandesHtml}
         ${(items.length || equipes.length) ? `<div>${itemsHtml}</div>`
           : (!demandesHtml ? `<div style="border-top:1px solid var(--line);padding:12px 16px;font-size:13px;color:var(--muted)">Aucun matériel affecté pour l'instant.</div>` : "")}
-        <div style="display:flex;gap:6px;padding:10px 12px;border-top:1px solid var(--line);margin-top:auto">
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:6px;padding:10px 12px;border-top:1px solid var(--line);margin-top:auto">
           <a class="btn btn-sm" href="${esc(adresseMission(name))}" target="_blank" rel="noopener">Ouvrir le tableau</a>
-          <button class="btn btn-sm btn-ghost" type="button" title="Le matériel se réserve pour une mission depuis le stock de matériel" ${on(()=>set({page:"materiel"}))}>Affecter du matériel</button>
-          <span style="flex:1"></span>
-          <button class="btn btn-icon btn-ghost" type="button" aria-label="Modifier la mission ${esc(name)}" ${on(()=>setT({editMission:{name, owner:meta.owner||"", date:meta.date||"",
+          <button class="btn btn-sm btn-ghost" type="button" title="Le matériel se réserve pour une mission depuis le stock de matériel" ${on(()=>set({page:"materiel"}))}>Affecter</button>
+          <button class="btn btn-icon btn-ghost" type="button" style="margin-left:auto" aria-label="Modifier la mission ${esc(name)}" ${on(()=>setT({editMission:{name, owner:meta.owner||"", date:meta.date||"",
             ouvertes:items.some(it=>!it.returned), vide:!items.length,
             archivable:!archived && (st==="TERMINÉE" || st==="ANNULÉE"), archived}}))}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20h4L19 9l-4-4L4 16Z"/><path d="m13.5 6.5 4 4"/></svg></button>
         </div>
@@ -4184,7 +4428,7 @@ function render(){
               })).join("")}
             </div>
             <p class="help" style="${gestionCreation.length?"":"color:var(--danger)"}">${gestionCreation.length
-              ? "Les gestionnaires composent l'effectif, peuvent prêter le sac d'une personne absente et revenir sur les statuts. On est gestionnaire ou membre de l'effectif, pas les deux."
+              ? "Les gestionnaires composent l'effectif, peuvent prêter le sac d'une personne absente et revenir sur les statuts. Un gestionnaire peut aussi faire partie d'une équipe."
               : "Une mission a besoin d'au moins un gestionnaire."}</p>
           </div>
           <div>
@@ -4229,6 +4473,7 @@ function render(){
         ${formulaire}
       </div>`}
     </div>`;
+    if(S.creationMission && peutCreerMission()) body = pagePreparation(true);
   }
 
   /* ---------- page : journal ---------- */
@@ -4399,7 +4644,7 @@ function render(){
               ${S.refs.map(r=>`<option value="${esc(r.id)}"${r.id===f.refId?" selected":""}>${esc(r.brand+" "+r.model+" · "+r.mpn)}</option>`).join("")}
             </select>` : `
             <div style="display:flex;flex-direction:column;gap:8px">
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px">
                 <input class="inp" data-k="rbrand" placeholder="Marque (ex. Motorola)" value="${esc(f.brand)}" ${oni(e=>{f.brand=e.target.value;})}>
                 <input class="inp" data-k="rmodel" placeholder="Nom commercial (ex. Edge 50)" value="${esc(f.modelName)}" ${oni(e=>{f.modelName=e.target.value;})}>
               </div>
@@ -4425,7 +4670,7 @@ function render(){
             </div>`}
           </div>
 
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
             <label class="field">
               <span class="klabel">QUANTITÉ</span>
               <input class="inp" data-k="rq" type="number" min="1" value="${esc(f.qty)}" ${oni(e=>{f.qty=e.target.value; render();})}>
@@ -4525,19 +4770,19 @@ function render(){
               <button class="btn-mini hblue${!f.newItem?' tog-on':''}" ${on(()=>{ f.newItem=!f.newItem; render(); })}>${f.newItem?"Article existant":"Nouvel article"}</button>` : ""}
             </div>
             ${!f.newItem ? `
-            <select class="inp" data-k="mrsel" style="width:100%" ${ong(e=>{ f.name=e.target.value; })}>
+            <select class="inp" data-k="mrsel" style="width:100%" ${ong(e=>{ f.name=e.target.value; render(); })}>
               ${S.materiel.map(m=>`<option value="${esc(m.id||m.name)}"${(m.id||m.name)===f.name?" selected":""}>${esc(m.name)}${m.etiquette||m.numeroSerie?" · "+esc(m.etiquette||m.numeroSerie):""}</option>`).join("")}
             </select>` : `
             <div style="display:flex;flex-direction:column;gap:8px">
-              <input class="inp" data-k="mrname" placeholder="Nom de l'article (ex. Chargeur 45 W)" value="${esc(f.newName)}" ${oni(e=>{f.newName=e.target.value;})}>
+              <input class="inp" data-k="mrname" placeholder="Nom de l'article (ex. Chargeur 45 W)" value="${esc(f.newName)}" ${oni(e=>{f.newName=e.target.value; render();})}>
               ${versSeries ? `
               <input class="inp" data-k="mretq" placeholder="Étiquette (commune aux exemplaires)" value="${esc(f.etiquette||"")}" ${oni(e=>{f.etiquette=e.target.value;})}>` : `
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px">
                 <input class="inp" data-k="mretq" placeholder="Étiquette" value="${esc(f.etiquette||"")}" ${oni(e=>{f.etiquette=e.target.value;})}>
                 <input class="inp" data-k="mrserie" placeholder="Numéro de série" value="${esc(f.numeroSerie||"")}" ${oni(e=>{f.numeroSerie=e.target.value;})}>
               </div>`}
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-                <select class="inp" data-k="mrcat" ${ong(e=>{ f.newCat=e.target.value; })}>
+              <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px">
+                <select class="inp" data-k="mrcat" ${ong(e=>{ f.newCat=e.target.value; render(); })}>
                   ${cats.map(c=>`<option value="${esc(c)}"${c===f.newCat?" selected":""}>${esc(c)}</option>`).join("")}
                 </select>
                 <select class="inp" data-k="mraffect" ${ong(e=>{ f.newAffectation=e.target.value; })}>
@@ -4550,6 +4795,12 @@ function render(){
             <span class="klabel">QUANTITÉ</span>
             <input class="inp" data-k="mrqty" type="number" min="1" value="${esc(f.qty)}" ${oni(e=>{f.qty=e.target.value; render();})}>
           </label>
+          ${(f.newItem ? f.newCat===CATEGORIE_DONGLE : (S.materiel.find(m=>(m.id||m.name)===f.name)||{}).cat===CATEGORIE_DONGLE) ? `
+          <label class="field">
+            <span class="klabel">FIN DE LICENCE <span style="color:var(--muted);font-weight:400;letter-spacing:0">(facultatif)</span></span>
+            <input class="inp" data-k="mrlic" type="date" value="${esc(f.licence||"")}" ${oni(e=>{f.licence=e.target.value;})}>
+            ${!f.newItem && (S.materiel.find(m=>(m.id||m.name)===f.name)||{}).licenceFin ? `<span style="font:400 12px/1.3 Inter,system-ui,sans-serif;color:var(--muted)">Actuellement : ${esc(libelleLicence(S.materiel.find(m=>(m.id||m.name)===f.name).licenceFin))}. Une nouvelle date la remplace.</span>` : ""}
+          </label>` : ""}
           ${versSeries?`<span style="font:400 12px/1.3 Inter,system-ui,sans-serif;color:var(--c-8fb4ff)">${nbEntre} exemplaires : leurs numéros de série seront demandés à l'étape suivante, pour pouvoir tracer lequel a servi.</span>`:""}
         </div>
         <div class="modal-foot">
@@ -4670,7 +4921,7 @@ function render(){
           <span class="modal-sub">Une seule personne · tout part ensemble ou rien ne part</span>
         </div>
         <div class="modal-body">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
             <label class="field">
               <span class="klabel">MISSION</span>
               <select class="inp" data-k="bmission" ${ong(e=>{ b.mission=e.target.value; render(); })}>
@@ -4801,12 +5052,13 @@ function render(){
     }));
     modals += `
     <div class="modal-back">
-      <div class="modal" role="dialog" aria-modal="true" style="width:520px;max-width:100%">
+      <div class="modal" role="dialog" aria-modal="true" style="width:1240px;max-width:100%;max-height:92vh;zoom:1.05">
         <div class="modal-head">
           <span class="modal-title">Modifier la mission</span>
           <span class="modal-sub">${esc(f.name)}</span>
         </div>
-        <div class="modal-body" style="gap:12px">
+        <div class="modal-body" style="gap:32px;padding:28px 32px;overflow:auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(440px,1fr));align-items:start">
+          <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
           <div class="field">
             <span class="klabel">RESPONSABLE</span>
             <span style="font:500 13px/1.2 Inter,system-ui,sans-serif;color:var(--c-e7e9ee)">${esc(f.owner||"—")}</span>
@@ -4823,9 +5075,7 @@ function render(){
               ${peutGererMission(f.name)
                 ? S.annuaire.map(c=>{
                     const gere = gestion.includes(c);
-                    const effectif = effectifMission.has(c);
                     const dernier = gere && gestion.length === 1;
-                    if(effectif) return "";       // on est en gestion OU en effectif
                     return `<button class="chip${gere?" on":""}" ${dernier?'disabled title="Une mission a besoin d\'au moins un gestionnaire"':'title="'+(gere?"Retirer de la gestion":"Nommer gestionnaire")+'"'} ${on(()=>agir("mission.gestion",{mission:f.name, gestionnaires: gere ? gestion.filter(x=>x!==c) : gestion.concat([c])}))}>${esc(c)}</button>`;
                   }).join("")
                 : gestion.map(c=>`<span class="badge info">${esc(c)}</span>`).join("")}
@@ -4835,11 +5085,13 @@ function render(){
               ${effectifMission.size ? Array.from(effectifMission).sort().map(c=>`<span class="badge mut">${esc(c)}</span>`).join("")
                 : `<span style="font:400 12px Inter,system-ui,sans-serif;color:var(--c-6d7480)">Personne : l'effectif se compose avec « + Équipe » puis « Membres ».</span>`}
             </div>
-            <span style="font:400 12px/1.4 Inter,system-ui,sans-serif;color:var(--c-6d7480)">On est gestionnaire ou en effectif d'une mission, pas les deux. Les gestionnaires (et les administrateurs) composent l'effectif, forcent des prêts et peuvent revenir en arrière sur les statuts.</span>
+            <span style="font:400 12px/1.4 Inter,system-ui,sans-serif;color:var(--c-6d7480)">Les gestionnaires (et les administrateurs) composent l'effectif, forcent des prêts et peuvent revenir en arrière sur les statuts. Un gestionnaire peut aussi faire partie d'une équipe.</span>
           </div>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
           <div class="field">
             <span class="klabel">MATÉRIEL AFFECTÉ · ${affectes.length}</span>
-            ${affectes.length ? `<div class="stack" style="border-radius:8px;max-height:230px;overflow:auto">${affectes.map(({id,index,r})=>`
+            ${affectes.length ? `<div class="stack" style="border-radius:8px;max-height:460px;overflow:auto">${affectes.map(({id,index,r})=>`
               <div style="background:var(--c-191c22);padding:8px 11px;display:flex;align-items:center;gap:10px">
                 <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
                   <span style="font:500 12px/1.25 Inter,system-ui,sans-serif;color:var(--c-eef0f4)">${esc(matLabel(id))} <span style="color:var(--c-f0b45a);font-weight:600">× ${r.qty}</span></span>
@@ -4865,6 +5117,7 @@ function render(){
               ${f.archived && peutGererMission(f.name)?`<button class="btn-mini hblue" ${on(()=>{ setT({editMission:null}); setMissionArchived(f.name, {}, false); })}>Désarchiver</button>`:""}
               ${f.vide && ADMIN?`<button class="btn-mini hred" ${on(()=>{ setT({editMission:null}); agir("mission.supprimer",{nom:f.name}); })}>Supprimer</button>`:""}
             </span>
+          </div>
           </div>
         </div>
         <div class="modal-foot">
@@ -4948,7 +5201,7 @@ function render(){
           <span class="modal-sub">${esc("Matériel du compte "+auteurEffectif())}</span>
         </div>
         <div class="modal-body" style="gap:16px;overflow:auto">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--c-2b2f37);border:1px solid var(--c-2b2f37);border-radius:8px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:1px;background:var(--c-2b2f37);border:1px solid var(--c-2b2f37);border-radius:8px;overflow:hidden">
             <button class="chip${ongletDotation?' on':''}" style="border:0;border-radius:0;text-align:center" ${on(()=>setT({possessionsTab:"dotation"}))}>Sac de dotation <span style="opacity:.7">· ${dotations.length}</span></button>
             <button class="chip${!ongletDotation?' on':''}" style="border:0;border-radius:0;text-align:center" ${on(()=>setT({possessionsTab:"emprunts"}))}>Emprunts et sorties <span style="opacity:.7">· ${nbEmprunts}</span></button>
           </div>
@@ -4994,6 +5247,87 @@ function render(){
   if(S.fiche && ADMIN) modals += ficheCompte(S.fiche);
   if(S.groupeEdit && ADMIN) modals += ficheGroupe(S.groupeEdit);
   if(S.sacMembre && S.page==="groupe") modals += fenetreSacMembre(S.sacMembre);
+
+  /* Fiche d'une pièce détachée : ses informations, et les modèles auxquels elle convient. */
+  if(S.pieceForm){
+    const f = S.pieceForm;
+    const recherche = (f.recherche||"").trim().toLowerCase();
+    const modeles = S.refs.filter(r=>!recherche || (r.brand+" "+r.model+" "+(r.mpn||"")).toLowerCase().includes(recherche));
+    const listeModeles = modeles.map(r=>{
+      const coche = f.modeles.includes(r.id);
+      return `<button type="button" role="checkbox" aria-checked="${coche}" ${on(()=>{ f.modeles = coche ? f.modeles.filter(x=>x!==r.id) : f.modeles.concat([r.id]); render(); })}
+        style="width:100%;padding:8px 11px;background:${coche?"var(--gold-soft)":"transparent"};border:0;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;text-align:left;cursor:pointer;color:var(--ink)">
+        <span style="width:16px;height:16px;flex:none;border-radius:4px;display:grid;place-items:center;font:700 12px/1 Inter,system-ui,sans-serif;${coche?"background:var(--gold);border:1px solid var(--gold);color:var(--gold-ink)":"border:1px solid var(--muted)"}">${coche?"✓":""}</span>
+        <span style="flex:1;min-width:0"><span style="display:block;font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.brand+" "+r.model)}</span>
+          ${r.mpn?`<span class="mono" style="display:block;font-size:12px;color:var(--muted)">${esc(r.mpn)}</span>`:""}</span>
+      </button>`;
+    }).join("");
+    const types = Array.from(new Set([...TYPES_PIECES, ...S.pieces.map(x=>x.type)]));
+    modals += `
+    <div class="modal-back">
+      <div class="modal" role="dialog" aria-modal="true" style="width:560px;max-height:92vh">
+        <div class="modal-head">
+          <span class="modal-title">${f.id?"Modifier la pièce":"Nouvelle pièce détachée"}</span>
+          <span class="modal-sub">${f.id?"Les entrées et les sorties se font depuis la liste.":"Référencez la pièce et les modèles de téléphone auxquels elle convient."}</span>
+        </div>
+        <div class="modal-body" style="overflow:auto">
+          <label class="field"><span class="klabel">NOM</span>
+            <input class="inp" data-k="pcnom" maxlength="200" placeholder="Écran OLED Galaxy S24" value="${esc(f.nom)}" ${oni(e=>{ f.nom=e.target.value; render(); })}></label>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
+            <label class="field"><span class="klabel">TYPE</span>
+              <input class="inp" data-k="pctype" list="pc-types" maxlength="80" value="${esc(f.type)}" ${oni(e=>{ f.type=e.target.value; })}>
+              <datalist id="pc-types">${types.map(ty=>`<option value="${esc(ty)}"></option>`).join("")}</datalist></label>
+            <label class="field"><span class="klabel">RÉF. FABRICANT <span style="color:var(--muted);font-weight:400;letter-spacing:0">(facultatif)</span></span>
+              <input class="inp" data-k="pcmpn" maxlength="120" value="${esc(f.mpn)}" ${oni(e=>{ f.mpn=e.target.value; })}></label>
+          </div>
+          ${f.id ? "" : `<label class="field"><span class="klabel">QUANTITÉ EN STOCK</span>
+            <input class="inp" data-k="pcqty" type="number" min="0" value="${esc(String(f.qty))}" ${oni(e=>{ f.qty=e.target.value; })}></label>`}
+          <label class="field"><span class="klabel">NOTES <span style="color:var(--muted);font-weight:400;letter-spacing:0">(facultatif)</span></span>
+            <input class="inp" data-k="pcnotes" maxlength="300" placeholder="Fournisseur, remarque de montage…" value="${esc(f.notes)}" ${oni(e=>{ f.notes=e.target.value; })}></label>
+          <div class="field" style="min-width:0">
+            <div style="display:flex;align-items:center;gap:9px">
+              <span class="klabel">MODÈLES COMPATIBLES · ${f.modeles.length}</span>
+              <input class="inp" data-k="pcrech" style="margin-left:auto;flex:0 1 200px;min-width:110px;padding:7px 9px;font-size:12px" placeholder="Rechercher un modèle…" value="${esc(f.recherche)}" ${oni(e=>{ f.recherche=e.target.value; render(); })}>
+            </div>
+            <div class="stack" style="border-radius:8px;max-height:230px;overflow:auto">${listeModeles || '<div style="padding:14px 11px;font:400 12px Inter,system-ui,sans-serif;color:var(--muted)">'+(S.refs.length?"Aucun modèle ne correspond.":"Aucun modèle de téléphone n'est encore référencé.")+'</div>'}</div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-sec" ${on(()=>setT({pieceForm:null}))}>Annuler</button>
+          <button class="btn-pri${(f.nom||"").trim()?"":" off"}" ${on(enregistrerPiece)}>${f.id?"Enregistrer":"Créer la pièce"}</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /* Entrée ou sortie d'une pièce. */
+  if(S.pieceMvt){
+    const f = S.pieceMvt;
+    const piece = S.pieces.find(x=>x.id===f.id);
+    if(!piece){ S.pieceMvt = null; }
+    else {
+      const sortie = f.genre==="sortie";
+      modals += `
+      <div class="modal-back" ${on(e=>{ if(e.target.classList.contains("modal-back")) setT({pieceMvt:null}); })}>
+        <div class="modal" role="dialog" aria-modal="true" style="width:420px">
+          <div class="modal-head">
+            <span class="modal-title">${sortie?"Sortir une pièce":"Entrée de stock"}</span>
+            <span class="modal-sub">${esc(piece.name)} · ${piece.qty} en stock</span>
+          </div>
+          <div class="modal-body">
+            <label class="field"><span class="klabel">QUANTITÉ</span>
+              <input class="inp" data-k="pmqty" type="number" min="1" ${sortie?'max="'+piece.qty+'"':""} value="${esc(String(f.qty))}" ${oni(e=>{ f.qty=e.target.value; })}></label>
+            ${sortie ? `<label class="field"><span class="klabel">MOTIF <span style="color:var(--muted);font-weight:400;letter-spacing:0">(facultatif)</span></span>
+              <input class="inp" data-k="pmmotif" maxlength="200" placeholder="Réparation du Galaxy S24 de…" value="${esc(f.motif)}" ${oni(e=>{ f.motif=e.target.value; })}></label>` : ""}
+          </div>
+          <div class="modal-foot">
+            <button class="btn-sec" ${on(()=>setT({pieceMvt:null}))}>Annuler</button>
+            <button class="btn-pri" ${on(enregistrerMouvementPiece)}>${sortie?"Sortir":"Enregistrer l'entrée"}</button>
+          </div>
+        </div>
+      </div>`;
+    }
+  }
 
   if(S.dotationEdit){
     const f = S.dotationEdit;
@@ -5078,6 +5412,92 @@ function render(){
         <div class="modal-foot">
           <button class="btn-sec" ${on(()=>setT({dotationEdit:null}))}>Annuler</button>
           <button class="btn-pri" ${on(confirmerDotation)}>Enregistrer</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
+  /* Déclarer un prêt à une personne sans compte : comme pour le sac d'un effectif, le
+     catalogue à gauche (avec sa recherche), ce qu'on déclare à droite. */
+  if(S.pretExtForm){
+    const f = S.pretExtForm;
+    const recherche = (f.query||"").trim().toLowerCase();
+    const cle = m => m.id || m.name;
+    const identiteDe = m => [m.etiquette?"étiquette "+m.etiquette:"", m.numeroSerie?"série "+m.numeroSerie:""]
+      .filter(Boolean).join(" · ");
+    const miens = new Set((S.dotations[OPERATOR]||[]).map(d=>d.article));
+    const choisi = S.materiel.find(m=>cle(m)===f.article) || null;
+
+    const catalogue = S.materiel.filter(m=>!recherche
+      || (m.name+" "+m.cat+" "+(m.etiquette||"")+" "+(m.numeroSerie||"")).toLowerCase().includes(recherche))
+      .sort((a,b)=>(miens.has(cle(b))-miens.has(cle(a))));
+    const colCatalogue = catalogue.map(m=>{
+      const k = cle(m), actif = k===f.article;
+      return `<div style="display:flex;align-items:center;gap:9px;padding:8px 11px;border-bottom:1px solid var(--line)${actif?";background:var(--gold-soft)":""}">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="font:500 12px/1.2 Inter,system-ui,sans-serif;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.name)}</span>
+          <span style="font:400 12px/1.2 Inter,system-ui,sans-serif;color:var(--soft);overflow-wrap:anywhere">${esc(identiteDe(m)||m.cat)}</span>
+        </span>
+        ${miens.has(k) ? `<span class="badge b-gold">Dans mon sac</span>` : ""}
+        <button class="btn-mini ${actif?"":"hblue"}" ${actif?"disabled":""} ${on(()=>{ f.article = k; if(m.numeroSerie) f.qty = 1; render(); })}>${actif?"Choisi":"Choisir"}</button>
+      </div>`;
+    }).join("");
+
+    const missions = S.missions.filter(m=>!m.archived).map(m=>m.name).sort((a,b)=>a.localeCompare(b,"fr"));
+    const unique = choisi && choisi.numeroSerie;
+    const colPret = `
+      <div style="display:flex;align-items:center;gap:9px;min-height:30px"><span class="klabel">PRÊT DÉCLARÉ</span></div>
+      <div class="stack" style="border-radius:8px;height:clamp(320px,calc(100vh - 340px),780px);overflow:auto;border-color:color-mix(in srgb, var(--gold) 40%, transparent)">
+        <div style="padding:11px 12px;border-bottom:1px solid var(--line)">
+          ${choisi ? `<span style="display:block;font:600 13px/1.25 Inter,system-ui,sans-serif;color:var(--ink);overflow-wrap:anywhere">${esc(choisi.name)}</span>
+            <span style="display:block;font:400 12px/1.3 Inter,system-ui,sans-serif;color:var(--soft);margin-top:2px;overflow-wrap:anywhere">${esc(identiteDe(choisi)||choisi.cat)}</span>`
+          : `<span style="font:400 12.5px/1.4 Inter,system-ui,sans-serif;color:var(--muted)">Choisissez le matériel prêté dans le catalogue.</span>`}
+        </div>
+        <div style="padding:12px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) 90px;gap:10px">
+            <label class="field"><span class="klabel">PRÊTÉ À</span>
+              <input class="inp" data-k="pxqui" maxlength="120" placeholder="Nom de la personne" value="${esc(f.emprunteur)}" ${oni(e=>{ f.emprunteur=e.target.value; })}></label>
+            <label class="field"><span class="klabel">QUANTITÉ</span>
+              ${unique ? `<span class="inp" style="text-align:right;color:var(--soft)">1</span>`
+              : `<input class="inp" data-k="pxqte" type="number" min="1" value="${esc(String(f.qty))}" ${oni(e=>{ f.qty=e.target.value; })}>`}</label>
+          </div>
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
+            <label class="field"><span class="klabel">MISSION</span>
+              <select class="inp" data-k="pxmis" ${ong(e=>{ f.mission=e.target.value; })}>
+                <option value="${esc(SANS_MISSION)}"${f.mission===SANS_MISSION?" selected":""}>Hors mission</option>
+                ${missions.map(n=>`<option value="${esc(n)}"${f.mission===n?" selected":""}>${esc(n)}</option>`).join("")}
+              </select></label>
+            <label class="field"><span class="klabel">À RENDRE AVANT LE</span>
+              <input class="inp" data-k="pxech" type="date" min="${aujourdhui()}" value="${esc(f.echeance)}" ${oni(e=>{ f.echeance=e.target.value; })}></label>
+          </div>
+          <label class="field"><span class="klabel">COMMENTAIRE <span style="color:var(--muted);font-weight:400;letter-spacing:0">(facultatif)</span></span>
+            <input class="inp" data-k="pxcom" maxlength="300" placeholder="Pourquoi, comment le joindre…" value="${esc(f.commentaire)}" ${oni(e=>{ f.commentaire=e.target.value; })}></label>
+        </div>
+      </div>`;
+
+    modals += `
+    <div class="modal-back" ${on(e=>{ if(e.target.classList.contains("modal-back")) setT({pretExtForm:null}); })}>
+      <div class="modal" role="dialog" aria-modal="true" style="width:1000px;max-width:100%">
+        <div class="modal-head">
+          <span class="modal-title">Déclarer un prêt</span>
+          <span class="modal-sub">Du matériel prêté à quelqu'un qui n'a pas de compte. Rien ne bouge dans le stock : c'est un rappel.</span>
+        </div>
+        <div class="modal-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:14px">
+            <div class="field" style="min-width:0">
+              <div style="display:flex;align-items:center;gap:9px">
+                <span class="klabel">CATALOGUE · ${catalogue.length}</span>
+                <input class="inp" data-k="pxrech" style="margin-left:auto;flex:0 1 220px;min-width:120px;padding:7px 9px;font-size:12px" placeholder="Rechercher un article…" value="${esc(f.query)}" ${oni(e=>{ f.query=e.target.value; render(); })}>
+              </div>
+              <div class="stack" style="border-radius:8px;height:clamp(320px,calc(100vh - 340px),780px);overflow:auto">${colCatalogue||'<div style="padding:18px 11px;color:var(--muted);font:400 12px Inter,system-ui,sans-serif">Aucun article ne correspond.</div>'}</div>
+            </div>
+            <div class="field" style="min-width:0">${colPret}</div>
+          </div>
+          <span style="font:400 12px/1.3 Inter,system-ui,sans-serif;color:var(--muted)">Passée l'échéance, une alerte s'affiche sur votre profil, celui de votre chef de groupe, de votre adjoint et des administrateurs.</span>
+        </div>
+        <div class="modal-foot">
+          <button class="btn-sec" ${on(()=>setT({pretExtForm:null}))}>Annuler</button>
+          <button class="btn-pri${choisi?'':' off'}" ${on(()=>{ if(choisi) envoyerPretExterne(); })}>Déclarer</button>
         </div>
       </div>
     </div>`;
@@ -5279,8 +5699,11 @@ function render(){
     const f = S.packEdit;
     const dejaDedans = new Set(f.lignes.map(l=>l.id));
     const recherche = (f.recherche||"").trim().toLowerCase();
+    // Un article déjà rangé dans une autre malette n'est plus proposé : il ne peut pas
+    // partir dans deux à la fois. La malette qu'on modifie, elle, ne se compte pas.
+    const dansUneAutre = new Set(S.packs.filter(x=>x.name!==f.original).flatMap(x=>x.items.map(i=>i.id)));
     const candidats = S.materiel
-      .filter(m=>!dejaDedans.has(m.id||m.name))
+      .filter(m=>!dejaDedans.has(m.id||m.name) && !dansUneAutre.has(m.id||m.name))
       .filter(m=>!recherche || (m.name+" "+m.cat+" "+(m.etiquette||"")+" "+(m.numeroSerie||"")).toLowerCase().includes(recherche))
       .slice(0, 40);
 
@@ -5323,7 +5746,7 @@ function render(){
           <span class="modal-sub">Les articles rangés dans une même malette</span>
         </div>
         <div class="modal-body" style="overflow:auto">
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
             <label class="field">
               <span class="klabel">NOM DE LA MALETTE</span>
               <input class="inp" data-k="pknom" maxlength="200" placeholder="Malette terrain A" value="${esc(f.nom)}" ${oni(e=>{ f.nom=e.target.value; render(); })}>
@@ -5345,6 +5768,7 @@ function render(){
             <span class="klabel">AJOUTER UN ARTICLE</span>
             <input class="inp" data-k="pkrech" placeholder="Rechercher dans le matériel…" value="${esc(f.recherche||"")}" ${oni(e=>{ f.recherche=e.target.value; render(); })}>
             <div class="stack" style="max-height:210px;overflow:auto">${candidatsHtml || '<div style="padding:14px 11px;font:400 12px Inter,system-ui,sans-serif;color:var(--c-6d7480)">Aucun article à ajouter</div>'}</div>
+            ${S.materiel.filter(m=>dansUneAutre.has(m.id||m.name) && !dejaDedans.has(m.id||m.name)).length ? `<span style="font:400 12px/1.3 Inter,system-ui,sans-serif;color:var(--muted)">${S.materiel.filter(m=>dansUneAutre.has(m.id||m.name) && !dejaDedans.has(m.id||m.name)).length} article(s) déjà rangé(s) dans une autre malette ne sont pas proposés.</span>` : ""}
           </div>
         </div>
         <div class="modal-foot">
@@ -5394,7 +5818,7 @@ function render(){
             <span class="modal-sub">${b.partiel?"Cochez ce que vous emportez":"La malette entière part d'un seul geste"}</span>
           </div>
           <div class="modal-body" style="overflow:auto">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
               <label class="field">
                 <span class="klabel">MISSION</span>
                 <select class="inp" data-k="pkmission" ${ong(e=>{ b.mission=e.target.value; render(); })}>
@@ -5512,10 +5936,10 @@ function render(){
             <input class="inp" data-k="lotnom" list="lot-noms" maxlength="200" placeholder="Cartouche de calibration" value="${esc(f.nom||"")}" ${oni(e=>{f.nom=e.target.value; render();})}>
             <datalist id="lot-noms">${existants.map(n=>`<option value="${esc(n)}"></option>`).join("")}</datalist>
           </label>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px">
             <label class="field">
               <span class="klabel">CATÉGORIE</span>
-              <select class="inp" data-k="lotcat" ${ong(e=>{f.cat=e.target.value;})}>
+              <select class="inp" data-k="lotcat" ${ong(e=>{f.cat=e.target.value; render();})}>
                 ${cats.map(c=>`<option value="${esc(c)}"${c===f.cat?" selected":""}>${esc(c)}</option>`).join("")}
               </select>
             </label>
@@ -5526,6 +5950,11 @@ function render(){
               </select>
             </label>
           </div>
+          ${f.cat===CATEGORIE_DONGLE ? `
+          <label class="field">
+            <span class="klabel">FIN DE LICENCE <span style="color:var(--muted);font-weight:400;letter-spacing:0">(facultatif, commune aux exemplaires)</span></span>
+            <input class="inp" data-k="lotlic" type="date" value="${esc(f.licence||"")}" ${oni(e=>{f.licence=e.target.value;})}>
+          </label>` : ""}
           <label class="field">
             <span class="klabel">NUMÉROS DE SÉRIE · ${series.length}</span>
             <textarea class="inp" data-k="lotseries" rows="7" placeholder="Un numéro par ligne&#10;CAL-0041&#10;CAL-0042&#10;CAL-0043" ${oni(e=>{f.series=e.target.value; render();})}>${esc(f.series||"")}</textarea>
@@ -5586,11 +6015,9 @@ function render(){
       if(e.nom===f.nom) return;
       e.membres.forEach(m=>{ (ailleurs[m]=ailleurs[m]||[]).push(e.nom); });
     });
-    // Les gestionnaires de la mission ne sont pas proposés : on est en gestion ou
-    // en effectif, pas les deux. Tous les comptes sont proposés, pas seulement
-    // aux administrateurs : un gestionnaire compose son effectif.
-    const gestionMission = new Set(gestionnairesDe(f.mission));
-    const listeHtml = S.annuaire.filter(c=>!gestionMission.has(c) || dans.has(c)).map(c=>{
+    // Tous les comptes sont proposés, gestionnaires compris, pas seulement aux
+    // administrateurs : un gestionnaire compose son effectif, et peut en faire partie.
+    const listeHtml = S.annuaire.map(c=>{
       const coche = dans.has(c);
       return `
       <button ${on(()=>{
@@ -5814,11 +6241,12 @@ async function confirmMatReception(){
   if(f.newItem){
     ok = await agir("materiel.creer", {
       nom:f.newName, cat:f.newCat, affectation:f.newAffectation, qty:n,
-      etiquette:f.etiquette||"", numeroSerie:f.numeroSerie||""
+      etiquette:f.etiquette||"", numeroSerie:f.numeroSerie||"",
+      licence:f.newCat===CATEGORIE_DONGLE ? (f.licence||"") : ""
     });
     if(ok) S.colFiltres.materiel.cat = "";
   } else {
-    ok = await agir("materiel.reception", { nom:f.name, qty:n });
+    ok = await agir("materiel.reception", { nom:f.name, qty:n, licence:f.licence||"" });
   }
   if(ok) setT({ matReceptForm:null });
 }
@@ -5985,10 +6413,319 @@ async function confirmLotForm(){
   if((f.etiquette||"").trim()) series.forEach(x=>{ etiquettes[x]=f.etiquette.trim(); });
   if(await agir("materiel.creer.lot", { nom:(f.nom||"").trim(), cat:f.cat,
                                         affectation:f.affectation, series,
-                                        etiquettes })){
+                                        etiquettes,
+                                        licence:f.cat===CATEGORIE_DONGLE ? (f.licence||"") : "" })){
     if(Number(f.attendus)) S.colFiltres.materiel.cat = "";
     setT({ lotForm:null, matReceptForm:null });
   }
+}
+
+/* ---------- préparer une mission : malettes | matériel | mission ----------
+   Trois colonnes pour composer un départ d'un seul regard : les malettes à gauche, les
+   articles au milieu, et à droite la mission avec ce qui y part. Le panier est celui de
+   « Réserver la sélection » (`demandePanier`, `manquesPanier`) et part par la même action
+   serveur : tout sort, ou rien. */
+function prepVide(){
+  const noms = missionNamesEmpruntables();
+  // `eq` : l'équipe de chaque ligne du panier (clé « a:<article> » ou « p:<malette> »), vide
+  // pour « toute la mission » ; `active` : l'équipe qui reçoit ce qu'on ajoute ensuite.
+  return { mission:noms[0]||"", commentaire:"", qtys:{}, packs:[], eq:{}, active:"" };
+}
+/* « + Nouvelle mission » : la carte de création s'ouvre sur la page des missions. */
+function ouvrirNouvelleMission(){
+  setT({page:"missions", creationMission:true, missionFormOuvert:false});
+}
+function basculerPreparation(){
+  if(S.prepMode) return setT({prepMode:false});
+  // La sélection déjà cochée dans le tableau sert de point de départ.
+  const prep = S.prep || prepVide();
+  prep.nouvelle = false;
+  Object.keys(S.matSel).forEach(n=>{ if(!(n in prep.qtys)) prep.qtys[n] = 1; });
+  Object.keys(S.packSel).forEach(nom=>{
+    const pk = S.packs.find(x=>x.name===nom);
+    if(pk && packDisponible(pk) && !prep.packs.includes(nom)) prep.packs.push(nom);
+  });
+  setT({prepMode:true, prep});
+}
+async function confirmerPreparation(){
+  const b = S.prep; if(!b) return;
+  const equipeDe = cle => (b.eq && b.eq[cle]) || "";   // déjà ramené à l'équipe imposée par la page
+  const lignes = Object.keys(b.qtys).map(nm=>({ nom:nm, qty:Math.max(1, Number(b.qtys[nm])||1), equipe:equipeDe("a:"+nm) }));
+  const packsEnvoyes = (b.packs||[]).map(nom=>({ nom, equipe:equipeDe("p:"+nom) }));
+  if(S.creationMission && peutCreerMission()){
+    // Le chef crée la mission et ses équipes ; chaque équipier prépare ensuite son matériel.
+    const n = (S._mName||"").trim(); if(!n) return;
+    const gestion = S._mGestion || [OPERATOR];
+    const equipes = S._mEquipes.map(e=>({ nom:e.nom, membres:e.membres.slice() }));
+    if(!(await agir("mission.creer", { nom:n, date:S._mDate||"", template:S._mTemplate||"",
+                                       choix:S._mChoix, gestionnaires:gestion, equipes }))) return;
+    const demandes = S._mDemandes;
+    setT({ prep:prepVide(), matSel:{}, packSel:{}, prepMode:false, creationMission:false, page:"missions",
+           _mName:"", _mDate:"", _mTemplate:"", _mChoix:{}, _mDeplie:{}, _mDemandes:[], _mGestion:null,
+           _mEquipes:[], _mEquipeNom:"" });
+    // Les demandes préparées partent maintenant que la mission existe.
+    for(const d of demandes)
+      await agir(d.forcer ? "pret.forcer" : "pret.demander",
+                 {proprietaire:d.proprietaire, article:d.article, qty:d.qty, mission:n, motif:d.motif});
+    return;
+  }
+  if(await agir("materiel.emprunt.groupe", { mission:(b.mission||"").trim(),
+                                             lignes, packs:packsEnvoyes,
+                                             commentaire:(b.commentaire||"").trim() })){
+    const neuf = prepVide(); neuf.mission = b.mission;
+    setT({ prep:neuf, matSel:{}, packSel:{} });
+  }
+}
+
+function pagePreparation(creation){
+  if(!S.prep) S.prep = prepVide();
+  const b = S.prep;
+  const t = (S.matQuery||"").trim().toLowerCase();
+  const missions = missionNamesEmpruntables();
+  if(!missions.includes(b.mission) && !creation) b.mission = missions[0] || "";
+  // Une malette sortie ou supprimée entre-temps ne reste pas au panier.
+  b.packs = b.packs.filter(nom=>{ const pk = S.packs.find(x=>x.name===nom); return pk && packDisponible(pk); });
+  Object.keys(b.qtys).forEach(id=>{ if(!S.materiel.some(m=>(m.id||m.name)===id)) delete b.qtys[id]; });
+  // Les équipes qui peuvent recevoir du matériel : celles qu'on est en train de créer, ou
+  // celles de la mission choisie. Une équipe disparue renvoie ses lignes à « toute la mission ».
+  const nouvelleMission = !!creation && peutCreerMission();
+  const equipesMission = nouvelleMission ? [] : equipesDe((b.mission||"").trim());
+  const equipesDispo = nouvelleMission ? S._mEquipes.map(e=>e.nom) : equipesMission.map(e=>e.nom);
+  // Un simple équipier prépare pour **son** équipe : le matériel y va d'office, sans qu'il ait à
+  // choisir. Les gestionnaires, les chefs de groupe et les administrateurs, eux, répartissent
+  // entre toutes les équipes. Dans plusieurs équipes, la plus récente sert de défaut.
+  const moiPrep = auteurEffectif();
+  const mesEquipes = equipesMission.filter(e=>(e.membres||[]).includes(moiPrep)).map(e=>e.nom);
+  const gereMissionPrep = !nouvelleMission && (peutGererMission((b.mission||"").trim()) || estChefDeGroupe());
+  const restreint = !nouvelleMission && !gereMissionPrep && mesEquipes.length>0;
+  const choixEquipes = restreint ? mesEquipes : equipesDispo;
+  const equipeParDefaut = mesEquipes.length ? mesEquipes[mesEquipes.length-1] : "";
+  const valide = v => choixEquipes.includes(v) || (!restreint && v==="");
+  if(!b.eq) b.eq = {};
+  Object.keys(b.eq).forEach(cle=>{ if(!valide(b.eq[cle])) b.eq[cle] = equipeParDefaut; });
+  if(!valide(b.active)) b.active = equipeParDefaut;
+  const equipeDe = cle => (cle in b.eq ? b.eq[cle] : equipeParDefaut) || "";
+
+  const attribues = new Set(Object.values(S.dotations).flat().map(d=>d.article));
+  const catalogue = S.materiel.filter(m=>!attribues.has(m.name));
+  const articles = catalogue.filter(m=>!t
+    || (m.name+" "+m.cat+" "+(m.etiquette||"")+" "+(m.numeroSerie||"")).toLowerCase().includes(t));
+  const packs = S.packs.filter(x=>!t
+    || (x.name+" "+(x.etiquette||"")+" "+x.owner+" "+x.items.map(i=>i.libelle).join(" ")).toLowerCase().includes(t));
+
+  const demande = demandePanier(b);
+  const manques = manquesPanier(b);
+  const nbPanier = b.packs.length + Object.keys(b.qtys).length;
+  const nouvelle = !!creation && peutCreerMission();
+  const gestionCreation = S._mGestion || [OPERATOR];
+  const modele = S.templates.find(t=>t.name===S._mTemplate) || null;
+  const creable = !!(S._mName||"").trim() && templateCreable(modele) && gestionCreation.length>0;
+  const bloque = manques.length>0 || (nouvelle ? !creable : (!nbPanier || !b.mission));
+
+  const colonne = (titre, compte, contenu, pied)=>`
+    <section class="card" aria-label="${esc(titre)}" style="display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden">
+      <div class="chead" style="flex:none"><h2>${esc(titre)}</h2>${compte!==null?`<span class="count">${compte}</span>`:""}</div>
+      <div style="flex:1;min-height:0;overflow:auto">${contenu}</div>
+      ${pied?`<div style="flex:none;border-top:1px solid var(--line)">${pied}</div>`:""}
+    </section>`;
+  const vide = txt=>`<div class="item" style="color:var(--muted);font-size:13px">${txt}</div>`;
+
+  // --- colonne de gauche : les malettes
+  const lignePack = pk=>{
+    const etat = packEtat(pk), dispo = packDisponible(pk), dedans = b.packs.includes(pk.name);
+    const badge = etat==="sorti" ? '<span class="badge b-warn">Dehors</span>'
+      : etat==="partiel" ? '<span class="badge b-danger">Incomplète</span>'
+      : !dispo ? '<span class="badge b-danger">Incomplète</span>' : '<span class="badge b-ok">Rangée</span>';
+    const raison = etat==="sorti" ? "Cette malette est dehors" : etat==="partiel" ? "Il manque des pièces" : !dispo ? "Stock insuffisant pour la sortir entière" : "";
+    return `
+      <div class="item" style="display:flex;align-items:center;gap:10px${dedans?";background:var(--gold-soft)":""}">
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px"><strong style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(pk.name)}">${esc(pk.name)}</strong>${badge}</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(pk.items.map(i=>i.qty+" × "+i.libelle).join(" · "))}">${esc(pk.items.map(i=>i.qty+" × "+i.libelle).join(" · ")||"Malette vide")}</div>
+        </div>
+        ${dedans
+          ? `<button class="btn btn-sm" type="button" ${on(()=>{ b.packs = b.packs.filter(x=>x!==pk.name); delete b.eq["p:"+pk.name]; render(); })}>Retirer</button>`
+          : `<button class="btn btn-sm btn-primary${dispo?"":" off"}" type="button" ${dispo?"":`disabled title="${esc(raison)}"`} ${on(()=>{ if(dispo){ b.packs.push(pk.name); b.eq["p:"+pk.name] = b.active||""; render(); } })}>Ajouter</button>`}
+      </div>`;
+  };
+
+  // --- colonne du milieu : les articles, par catégorie
+  const AFFICHES = 150;
+  let cat = null;
+  const ligneArticle = m=>{
+    const id = m.id||m.name, dispo = matAvailable(id), dedans = id in b.qtys;
+    const detail = exemplaireDetail(m);
+    const bandeau = m.cat!==cat ? (cat = m.cat, `<div class="ghead"><span class="over" style="color:var(--soft)">${esc(m.cat)}</span></div>`) : "";
+    return bandeau + `
+      <div class="item" style="display:flex;align-items:center;gap:10px${dedans?";background:var(--gold-soft)":""}">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name)}</div>
+          ${detail?`<div class="mono" style="font-size:12px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(detail)}</div>`:""}
+        </div>
+        <span class="num" style="font-size:12px;white-space:nowrap;color:${dispo>0?"var(--muted)":"var(--danger)"}">disp. ${dispo}</span>
+        ${dedans
+          ? `<button class="btn btn-sm" type="button" ${on(()=>{ delete b.qtys[id]; delete b.eq["a:"+id]; render(); })}>Retirer</button>`
+          : `<button class="btn btn-sm btn-primary${dispo>0?"":" off"}" type="button" ${dispo>0?"":"disabled"} ${on(()=>{ if(dispo>0){ b.qtys[id] = 1; b.eq["a:"+id] = b.active||""; render(); } })}>Ajouter</button>`}
+      </div>`;
+  };
+  const tries = articles.slice().sort((a,c)=>a.cat.localeCompare(c.cat,"fr") || a.name.localeCompare(c.name,"fr"));
+
+  // --- colonne de droite : la mission et ce qui part
+  const deplacer = cle => choixEquipes.length > (restreint ? 1 : 0) ? `<select class="inp" aria-label="Équipe de cette ligne" data-k="peq-${esc(cle)}" style="width:auto;max-width:120px;padding:4px 6px;font-size:12px" ${ong(e=>{ b.eq[cle] = e.target.value; render(); })}>
+      ${restreint ? "" : `<option value=""${!equipeDe(cle)?" selected":""}>Toute la mission</option>`}
+      ${choixEquipes.map(n=>`<option value="${esc(n)}"${equipeDe(cle)===n?" selected":""}>${esc(n)}</option>`).join("")}
+    </select>` : "";
+  const lignePanierPack = nom=>{
+    const pk = S.packs.find(x=>x.name===nom);
+    return `
+      <div class="item" style="display:flex;align-items:flex-start;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;overflow-wrap:anywhere">${esc(nom)} <span class="badge b-gold">Malette</span></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(pk.items.map(i=>i.qty+" × "+i.libelle).join(" · "))}</div>
+        </div>
+        ${deplacer("p:"+nom)}
+        <button class="btn btn-sm btn-ghost" type="button" aria-label="Retirer la malette ${esc(nom)}" ${on(()=>{ b.packs = b.packs.filter(x=>x!==nom); delete b.eq["p:"+nom]; render(); })}>✕</button>
+      </div>`;
+  };
+  const lignePanierArticle = id=>{
+    const m = S.materiel.find(x=>(x.id||x.name)===id) || {name:id};
+    const avail = matAvailable(id);
+    const parPacks = (demande[id]||0) - Math.max(1, Number(b.qtys[id])||1);
+    const trop = manques.includes(id);
+    const unique = !!m.numeroSerie;
+    return `
+      <div class="item" style="display:flex;align-items:center;gap:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.name)}</div>
+          <div style="font-size:12px;color:${trop?"var(--danger)":"var(--muted)"}">disp. ${avail}${parPacks?" · "+parPacks+" en malette":""}</div>
+        </div>
+        ${unique ? `<span class="num" style="font-weight:600">1 u.</span>`
+          : `<input class="inp" data-k="pq-${esc(id)}" type="number" min="1" max="${Math.max(1, avail-parPacks)}" style="width:64px;padding:6px 8px;font-size:12px;${trop?"border-color:var(--danger)":""}" value="${esc(b.qtys[id])}" ${oni(e=>{ b.qtys[id]=e.target.value; render(); })}>`}
+        ${deplacer("a:"+id)}
+        <button class="btn btn-sm btn-ghost" type="button" aria-label="Retirer ${esc(m.name)}" ${on(()=>{ delete b.qtys[id]; delete b.eq["a:"+id]; render(); })}>✕</button>
+      </div>`;
+  };
+  const bascule = "";
+  const champsMission = nouvelle ? `
+      <div><label class="lbl" for="p-name">Nom de la mission</label>
+        <input class="input" id="p-name" data-k="mname" type="text" placeholder="Ex. Intervention site Nord" value="${esc(S._mName||"")}" ${oni(e=>{ S._mName=e.target.value; render(); })}></div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <div style="flex:1 1 130px"><label class="lbl" for="p-date">Date prévue</label>
+          <input class="input" id="p-date" data-k="mdate" type="date" value="${esc(S._mDate||"")}" ${ong(e=>{ S._mDate=e.target.value; })}></div>
+        ${S.templates.length ? `<div style="flex:1 1 130px"><label class="lbl" for="p-tpl">Modèle</label>
+          <select class="input" id="p-tpl" data-k="mtemplate" ${ong(e=>setT({_mTemplate:e.target.value, _mChoix:{}, _mDeplie:{}}))}>
+            <option value="">Sans modèle</option>
+            ${S.templates.map(t=>`<option value="${esc(t.name)}"${S._mTemplate===t.name?" selected":""}>${esc(t.name)} · ${t.items.length} article${t.items.length>1?"s":""}</option>`).join("")}
+          </select></div>` : ""}
+      </div>
+      ${modele ? apercuTemplateHtml(modele) : ""}
+      <div><span class="lbl">Gestionnaires</span>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          ${S.annuaire.map(c=>chip(c+(c===OPERATOR?" (vous)":""), gestionCreation.includes(c), ()=>{
+            const courants = S._mGestion || [OPERATOR];
+            setT({_mGestion: courants.includes(c) ? courants.filter(x=>x!==c) : courants.concat([c])});
+          })).join("")}
+        </div>
+        ${gestionCreation.length ? "" : `<p class="help" style="color:var(--danger)">Une mission a besoin d'au moins un gestionnaire.</p>`}</div>
+      <div><div style="display:flex;align-items:center"><span class="lbl" style="flex:1;margin:0">Équipes</span><span class="count">${S._mEquipes.length}</span></div>
+        ${S._mEquipes.map((e,i)=>{
+          const dispo = S.annuaire;
+          return `<div style="border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:8px;display:flex;flex-direction:column;gap:8px;background:var(--raised)">
+            <div style="display:flex;align-items:center;gap:8px"><strong style="flex:1;min-width:0;overflow-wrap:anywhere">${esc(e.nom)}</strong>
+              <span style="font-size:12px;color:var(--muted)">${e.membres.filter(m=>dispo.includes(m)).length} membre${e.membres.filter(m=>dispo.includes(m)).length>1?"s":""}</span>
+              <button class="btn btn-icon btn-ghost" style="width:24px;height:24px" type="button" aria-label="Retirer l'équipe ${esc(e.nom)}" ${on(()=>setT({_mEquipes:S._mEquipes.filter((_,j)=>j!==i)}))}>✕</button></div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              ${dispo.length ? dispo.map(c=>chip(c, e.membres.includes(c), ()=>{ e.membres = e.membres.includes(c) ? e.membres.filter(x=>x!==c) : e.membres.concat([c]); render(); })).join("")
+                : `<span style="font-size:12px;color:var(--muted)">Tous les comptes gèrent la mission.</span>`}
+            </div></div>`;
+        }).join("")}
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <input class="input" data-k="meqnom" type="text" maxlength="200" placeholder="Nom de l'équipe (ex. Équipe terrain)" value="${esc(S._mEquipeNom||"")}" ${oni(e=>{ S._mEquipeNom=e.target.value; })}>
+          <button class="btn btn-sm" type="button" ${on(()=>{
+            const n = (S._mEquipeNom||"").trim(); if(!n) return;
+            if(S._mEquipes.some(e=>e.nom.toLowerCase()===n.toLowerCase())){ syncNote("Une équipe s'appelle déjà « "+n+" »."); return; }
+            setT({_mEquipes:S._mEquipes.concat([{nom:n, membres:[]}]), _mEquipeNom:""});
+          })}>+ Ajouter</button>
+        </div>
+        ${S._mEquipes.length ? "" : `<p class="help">Facultatif : les équipes se créent ici, avec leurs membres, ou plus tard depuis la mission.</p>`}</div>
+      <div><div style="display:flex;align-items:center"><span class="lbl" style="flex:1;margin:0">Matériel personnel à demander</span>
+        <button class="btn btn-sm btn-ghost" type="button" style="color:var(--gold)" ${on(()=>ouvrirDemandePret("file", (S._mName||"").trim()||"cette mission"))}>+ Demander</button></div>
+        ${S._mDemandes.length ? `<div style="display:flex;flex-wrap:wrap;gap:7px;margin-top:8px">${S._mDemandes.map((d,i)=>`
+          <span class="badge b-tag b-info" style="gap:7px;height:auto;padding:4px 8px">${d.qty} × ${esc(d.libelle)} → ${esc(d.proprietaire)}${d.forcer?" · forcé":""}
+            <button class="btn btn-icon btn-ghost" style="width:20px;height:20px" aria-label="Retirer" ${on(()=>setT({_mDemandes:S._mDemandes.filter((_,j)=>j!==i)}))}>✕</button></span>`).join("")}</div>` : ""}</div>
+      <div style="font-size:12.5px;color:var(--muted)">Une fois la mission créée, chaque membre d'une équipe prépare le matériel de son équipe depuis « Préparer une mission ».</div>`
+    : `
+      <label class="field"><span class="klabel">MISSION</span>
+        <select class="inp" data-k="prepmission" ${ong(e=>{ b.mission=e.target.value; b.active=""; b.eq={}; render(); })}>
+          ${missions.map(nm=>`<option value="${esc(nm)}"${nm===b.mission?" selected":""}>${nm===SANS_MISSION?"Sans mission":esc(nm)}</option>`).join("")}
+        </select></label>
+      <div style="font-size:12.5px;color:var(--muted)">Pris par <b style="color:var(--ink);font-weight:600">${esc(OPERATOR)}</b></div>`;
+  /* L'équipe active : tout ce qu'on ajoute ensuite lui est attribué. Le panier est groupé par
+     équipe, et chaque ligne peut changer de groupe — on peut toujours revenir sur ses pas. */
+  const choixEquipe = restreint && mesEquipes.length===1 ? `
+    <div style="padding:12px 16px;border-bottom:1px solid var(--line);font-size:13px;color:var(--soft)">Le matériel que vous ajoutez part dans votre équipe : <b style="color:var(--ink);font-weight:600">${esc(mesEquipes[0])}</b>.</div>`
+    : choixEquipes.length ? `
+    <div style="padding:12px 16px;border-bottom:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
+      <span class="klabel">LE MATÉRIEL AJOUTÉ VA À</span>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${(restreint ? choixEquipes : [""].concat(choixEquipes)).map(n=>chip(n || "Toute la mission", (b.active||"")===n, ()=>{ b.active = n; render(); })).join("")}
+      </div>
+    </div>` : "";
+  const groupesEquipes = restreint ? choixEquipes : [""].concat(equipesDispo);
+  const panierGroupe = groupesEquipes.map(nomEquipe=>{
+    const packsG = b.packs.filter(n=>equipeDe("p:"+n)===nomEquipe);
+    const itemsG = Object.keys(b.qtys).filter(id=>equipeDe("a:"+id)===nomEquipe);
+    const unites = itemsG.reduce((n,id)=>n+Math.max(1, Number(b.qtys[id])||1), 0)
+      + packsG.reduce((n,nom)=>n+((S.packs.find(x=>x.name===nom)||{items:[]}).items.reduce((t,i)=>t+i.qty,0)), 0);
+    const actif = equipesDispo.length && !restreint && (b.active||"")===nomEquipe;
+    if(!packsG.length && !itemsG.length && !actif) return "";
+    const entete = (equipesDispo.length && !(restreint && mesEquipes.length===1)) ? `
+      <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;background:var(--raised);border-top:1px solid var(--line)${actif?";box-shadow:inset 3px 0 0 var(--gold)":""}">
+        <span class="over" style="color:${nomEquipe?"var(--soft)":"var(--muted)"}">${nomEquipe?esc(nomEquipe):"Toute la mission"}</span>
+        ${unites?`<span class="badge b-warn">${unites} u.</span>`:'<span class="badge b-neutral">Vide</span>'}
+      </div>` : "";
+    return entete + packsG.map(lignePanierPack).join("") + itemsG.map(lignePanierArticle).join("")
+      + ((!packsG.length && !itemsG.length) ? `<div style="padding:10px 16px;font-size:13px;color:var(--muted)">Rien pour l'instant : ce que vous ajoutez ira ici.</div>` : "");
+  }).join("");
+  const panneauMission = `
+    <div style="padding:14px 16px;display:flex;flex-direction:column;gap:12px;border-bottom:1px solid var(--line)">
+      ${bascule}
+      ${champsMission}
+    </div>
+    ${choixEquipe}
+    ${nbPanier ? panierGroupe
+      : vide(nouvelle ? "Aucun matériel pour l'instant : la mission peut aussi être créée sans, ou avec un modèle." : "Rien n'est encore choisi : ajoutez des malettes et des articles depuis les deux autres colonnes.")}`;
+  const piedMission = `
+    <div style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+      <textarea class="inp" data-k="prepcomment" maxlength="500" rows="2" placeholder="Commentaire commun aux sorties (facultatif)" ${oni(e=>{ b.commentaire=e.target.value; })}>${esc(b.commentaire||"")}</textarea>
+      ${manques.length ? `<span style="font-size:12px;line-height:1.35;color:var(--danger)">Stock insuffisant pour : ${esc(manques.map(matLabel).join(", "))}. Réduisez la quantité, ou retirez une malette qui réclame le même article.</span>` : ""}
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-sm btn-ghost" type="button" ${nbPanier?"":"disabled"} ${on(()=>{ const m = b.mission; S.prep = prepVide(); S.prep.mission = m; S.matSel = {}; S.packSel = {}; render(); })}>Vider</button>
+        <button class="btn btn-primary${bloque?" off":""}" type="button" style="margin-left:auto" ${bloque?"disabled":""} ${on(confirmerPreparation)}>${nouvelle ? "Créer la mission"+(nbPanier?" et emprunter · "+nbPanier:"") : "Emprunter"+(nbPanier?" · "+nbPanier:"")}</button>
+      </div>
+    </div>`;
+
+  if(nouvelle) return `
+  <div style="flex:1;min-height:0;padding:20px 32px 32px;overflow:auto">
+    <section class="card" aria-label="Nouvelle mission" style="max-width:760px;margin:0 auto;display:flex;flex-direction:column">
+      <div class="chead"><h2>Nouvelle mission</h2></div>
+      <div style="padding:14px 16px;display:flex;flex-direction:column;gap:14px">
+        ${bascule}
+        ${champsMission}
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--line)">
+        <button class="btn" type="button" ${on(()=>setT({creationMission:false}))}>Annuler</button>
+        <button class="btn btn-primary${creable?"":" off"}" type="button" ${creable?"":"disabled"} ${on(confirmerPreparation)}>Créer la mission</button>
+      </div>
+    </section>
+  </div>`;
+
+  return `
+  <div style="flex:1;min-height:0;padding:20px 32px 32px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));grid-auto-rows:minmax(420px,1fr);gap:16px;min-width:0;overflow:auto">
+    ${colonne("Malettes", packs.length, packs.length ? packs.map(lignePack).join("") : vide(S.packs.length ? "Aucune malette ne correspond à la recherche." : "Aucune malette n'est définie."))}
+    ${colonne("Matériel", articles.length, tries.length ? tries.slice(0, AFFICHES).map(ligneArticle).join("") + (tries.length>AFFICHES ? vide("Seuls les "+AFFICHES+" premiers articles sont montrés : affinez la recherche.") : "") : vide("Aucun article ne correspond à la recherche."))}
+    ${colonne("Mission", nbPanier, panneauMission, piedMission)}
+  </div>`;
 }
 
 function openBatch(){

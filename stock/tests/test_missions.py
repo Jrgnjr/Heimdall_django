@@ -336,3 +336,79 @@ class DesassignerDuMateriel(BaseStock):
         self.agir("materiel.mission.desassigner", nom="Kit outils démontage", index=0)
         self.assertEqual(etat_prets("Bob")["prets"], [])
         self.assertEqual(etat_prets(self.UTILISATEUR)["sacs"]["Bob"][0]["disponible"], 2)
+
+
+class EquipesALaCreation(BaseStock):
+    """Les équipes se créent avec la mission, vérifiées avant toute écriture."""
+
+    def creer(self, **p):
+        return self.agir("mission.creer", nom="Chantier Nord", **p)
+
+    def test_creer_la_mission_avec_ses_equipes_et_leurs_membres(self):
+        from comptes.models import Compte
+        Compte.objects.create_user("Alice", password="x", doit_changer=False)
+        Compte.objects.create_user("Bob", password="x", doit_changer=False)
+        self.creer(equipes=[{"nom": "Terrain", "membres": ["Alice", "Bob"]},
+                            {"nom": "Base", "membres": []}])
+        m = Mission.objects.get(pk="Chantier Nord")
+        self.assertEqual([e.nom for e in m.equipes.order_by("ordre")], ["Terrain", "Base"])
+        self.assertEqual(sorted(m.equipes.get(nom="Terrain").membres.values_list(
+            "identifiant", flat=True)), ["Alice", "Bob"])
+
+    def test_sans_equipe_rien_ne_change(self):
+        self.creer()
+        self.assertFalse(Mission.objects.get(pk="Chantier Nord").equipes.exists())
+
+    def test_deux_equipes_de_meme_nom(self):
+        self.assertIn("existe déjà", self.refus(
+            "mission.creer", nom="Chantier Nord",
+            equipes=[{"nom": "Terrain"}, {"nom": "terrain"}]))
+        self.assertFalse(Mission.objects.filter(pk="Chantier Nord").exists())
+
+    def test_un_gestionnaire_peut_etre_membre_d_une_equipe(self):
+        self.creer(gestionnaires=[self.UTILISATEUR],
+                   equipes=[{"nom": "Terrain", "membres": [self.UTILISATEUR]}])
+        e = Mission.objects.get(pk="Chantier Nord").equipes.get(nom="Terrain")
+        self.assertEqual(list(e.membres.values_list("identifiant", flat=True)),
+                         [self.UTILISATEUR])
+
+    def test_membre_inconnu_ou_en_double(self):
+        self.assertIn("n'existe pas", self.refus(
+            "mission.creer", nom="Chantier Nord",
+            equipes=[{"nom": "Terrain", "membres": ["Fantôme"]}]))
+
+
+class RepartitionAuDepart(BaseStock):
+    """Chaque ligne du panier peut partir dans son équipe."""
+
+    def setUp(self):
+        super().setUp()
+        self.agir("mission.creer", nom="Chantier Nord",
+                  equipes=[{"nom": "Terrain"}, {"nom": "Base"}])
+        self.nom1, self.nom2 = [m.name for m in Material.objects.all()[:2]]
+
+    def equipe_de(self, nom):
+        return MaterialReservation.objects.get(material_id=nom, returned_at__isnull=True,
+                                               returned_by__isnull=True).equipe
+
+    def test_chaque_ligne_va_dans_son_equipe(self):
+        self.agir("materiel.emprunt.groupe", mission="Chantier Nord", packs=[],
+                  lignes=[{"nom": self.nom1, "qty": 1, "equipe": "Terrain"},
+                          {"nom": self.nom2, "qty": 1, "equipe": "Base"}])
+        self.assertEqual((self.equipe_de(self.nom1), self.equipe_de(self.nom2)),
+                         ("Terrain", "Base"))
+
+    def test_une_ligne_sans_equipe_reste_au_niveau_de_la_mission(self):
+        self.agir("materiel.emprunt.groupe", mission="Chantier Nord", packs=[],
+                  lignes=[{"nom": self.nom1, "qty": 1, "equipe": ""}])
+        self.assertEqual(self.equipe_de(self.nom1), "")
+
+    def test_l_equipe_du_panier_sert_de_defaut(self):
+        self.agir("materiel.emprunt.groupe", mission="Chantier Nord", packs=[],
+                  equipe="Base", lignes=[{"nom": self.nom1, "qty": 1}])
+        self.assertEqual(self.equipe_de(self.nom1), "Base")
+
+    def test_equipe_inconnue_refusee_sans_rien_enregistrer(self):
+        self.refus("materiel.emprunt.groupe", mission="Chantier Nord", packs=[],
+                   lignes=[{"nom": self.nom1, "qty": 1, "equipe": "Fantôme"}])
+        self.assertFalse(MaterialReservation.objects.exists())

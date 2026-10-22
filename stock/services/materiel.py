@@ -13,6 +13,8 @@ Trois notions qu'il faut tenir séparées :
   des consommables illisible.
 """
 
+from datetime import date
+
 from django.db.models import Max
 from django.utils import timezone
 
@@ -65,7 +67,23 @@ def par_serie(libelle, numero_serie):
     return None
 
 
-def creer_article(nom, cat, affect, quantite, etiquette="", numero_serie=""):
+def licence_saisie(p):
+    """La date de fin de licence saisie à l'entrée d'un dongle, ou None.
+
+    Facultative, et au format AAAA-MM-JJ. Une date passée est acceptée : on peut
+    recevoir un dongle dont la licence est déjà échue, et il faut pouvoir le dire.
+    """
+    brut = texte(p, "licence", obligatoire=False, maxi=10)
+    if not brut:
+        return None
+    try:
+        return date.fromisoformat(brut)
+    except ValueError:
+        raise ErreurAction("La fin de licence doit être une date (AAAA-MM-JJ).")
+
+
+def creer_article(nom, cat, affect, quantite, etiquette="", numero_serie="",
+                  licence_fin=None):
     """Crée un exemplaire, en suffixant la clé si le nom est déjà pris.
 
     `name` est la clé, `libelle` le nom affiché : deux exemplaires du même
@@ -80,7 +98,9 @@ def creer_article(nom, cat, affect, quantite, etiquette="", numero_serie=""):
     return Material.objects.create(
         name=cle, ordre=ordre, cat=cat, qty=quantite, seuil=0,
         affectation=affect or "Commun", libelle=nom,
-        etiquette=etiquette or "", numero_serie=numero_serie or "")
+        etiquette=etiquette or "", numero_serie=numero_serie or "",
+        # Seul un dongle porte une licence : la date n'a pas de sens ailleurs.
+        licence_fin=licence_fin if cat == Material.CATEGORIE_DONGLE else None)
 
 
 def creer_emprunt(m, quantite, mission, par_qui, pack="", equipe="", sac_de="",
@@ -152,13 +172,18 @@ def materiel_creer(utilisateur, p):
     n = qte(p)
     etiquette = texte(p, "etiquette", obligatoire=False, maxi=200)
     numero_serie = texte(p, "numeroSerie", obligatoire=False, maxi=200)
+    licence = licence_saisie(p)
 
     # Un article exactement identique — même nom, même étiquette, même série —
     # est un réapprovisionnement, pas un nouvel article.
     existant = identifie(nom, etiquette, numero_serie)
     if existant:
         existant.qty += n
-        existant.save(update_fields=["qty"])
+        champs = ["qty"]
+        if licence and existant.cat == Material.CATEGORIE_DONGLE:
+            existant.licence_fin = licence
+            champs.append("licence_fin")
+        existant.save(update_fields=champs)
         journaux.materiel("ENTRÉE", existant.nom_affiche, n, utilisateur,
                           identite=existant.identite)
         return ("Entrée de %d × %s" % (n, existant.nom_affiche),
@@ -166,7 +191,7 @@ def materiel_creer(utilisateur, p):
 
     m = creer_article(nom, texte(p, "cat", obligatoire=False,
                                  defaut="Accessoire", maxi=80),
-                      affectation(p), n, etiquette, numero_serie)
+                      affectation(p), n, etiquette, numero_serie, licence)
     journaux.materiel("CRÉATION", m.nom_affiche, n, utilisateur,
                       identite=m.identite)
     return "Article « %s » créé" % m.nom_affiche, [["materiel", m.name], ["matLog", ""]]
@@ -176,8 +201,14 @@ def materiel_creer(utilisateur, p):
 def materiel_reception(utilisateur, p):
     m = article(texte(p, "nom", maxi=200))
     n = qte(p)
+    licence = licence_saisie(p)
     m.qty += n
-    m.save(update_fields=["qty"])
+    champs = ["qty"]
+    # Recevoir un dongle renouvelé met sa licence à jour.
+    if licence and m.cat == Material.CATEGORIE_DONGLE:
+        m.licence_fin = licence
+        champs.append("licence_fin")
+    m.save(update_fields=champs)
     journaux.materiel("ENTRÉE", m.nom_affiche, n, utilisateur,
                       identite=m.identite)
     return ("Entrée de %d × %s" % (n, m.nom_affiche),
@@ -295,6 +326,7 @@ def materiel_creer_lot(utilisateur, p):
     nom = texte(p, "nom", maxi=200)
     cat = texte(p, "cat", obligatoire=False, defaut="Accessoire", maxi=80)
     affect = affectation(p)
+    licence = licence_saisie(p)
     brutes = p.get("series")
     if not isinstance(brutes, list) or not brutes:
         raise ErreurAction("Aucun numéro de série fourni.")
@@ -320,7 +352,7 @@ def materiel_creer_lot(utilisateur, p):
     for serie in series:
         m = creer_article(nom, cat, affect, 1,
                           texte(etiquettes, serie, obligatoire=False, maxi=200),
-                          serie)
+                          serie, licence)
         journaux.materiel("CRÉATION", m.nom_affiche, 1, utilisateur,
                           identite=m.identite)
         cibles.append(["materiel", m.name])
@@ -419,7 +451,7 @@ def materiel_emprunt_groupe(utilisateur, p):
 
     prepare, pris, vus = [], {}, set()
 
-    def engager(m, n, pack_nom):
+    def engager(m, n, pack_nom, equipe_voulue=None):
         restant = m.disponible() - pris.get(m.name, 0)
         if n > restant:
             origine = (" Le pack « %s » n'est pas sorti." % pack_nom if pack_nom
@@ -429,10 +461,13 @@ def materiel_emprunt_groupe(utilisateur, p):
                 "demandée(s). Aucun emprunt n'a été enregistré.%s"
                 % (m.designation, max(0, restant), n, origine))
         pris[m.name] = pris.get(m.name, 0) + n
-        prepare.append((m, n, pack_nom))
+        prepare.append((m, n, pack_nom, equipe_voulue))
 
     for brut in noms_packs:
-        nom = texte({"nom": brut}, "nom", maxi=200)
+        # Une malette est un nom, ou {"nom", "equipe"} pour la ranger dans une équipe.
+        equipe_pack = brut.get("equipe") if isinstance(brut, dict) else None
+        nom = texte({"nom": brut.get("nom") if isinstance(brut, dict) else brut},
+                    "nom", maxi=200)
         if nom in vus:
             raise ErreurAction("Le pack « %s » est sélectionné deux fois." % nom)
         vus.add(nom)
@@ -444,24 +479,33 @@ def materiel_emprunt_groupe(utilisateur, p):
                     "« %s » est déjà sorti du pack « %s » (%d unité(s)). "
                     "Rendez-le avant de reprendre la malette."
                     % (m.designation, pack.name, deja[m.name]))
-            engager(m, n, pack.name)
+            engager(m, n, pack.name, equipe_pack)
 
     for l in lignes:
         if not isinstance(l, dict):
             raise ErreurAction("Ligne d'emprunt invalide.")
-        engager(article(texte(l, "nom", maxi=200)), qte(l), "")
+        engager(article(texte(l, "nom", maxi=200)), qte(l), "", l.get("equipe"))
 
     from .equipes import equipe_demandee
     nom_mission = mission.name if mission else SANS_MISSION
-    # Une seule équipe pour tout le panier : c'est un chargement, et le
-    # répartir ligne à ligne se fait ensuite, depuis l'écran des missions.
+    # L'équipe du panier tout entier (`equipe`), que chaque ligne ou malette peut
+    # remplacer par la sienne : c'est ce qui permet de répartir au moment de partir.
     equipe = equipe_demandee(p, nom_mission)
+    equipes_vues = {}
+
+    def equipe_de(voulue):
+        if voulue is None:
+            return equipe
+        if voulue not in equipes_vues:
+            equipes_vues[voulue] = equipe_demandee({"equipe": voulue}, nom_mission)
+        return equipes_vues[voulue]
+
     cibles = [["matLog", ""]]
     if noms_packs:
         cibles.append(["packs", ""])
-    for m, n, pack_nom in prepare:
+    for m, n, pack_nom, voulue in prepare:
         creer_emprunt(m, n, nom_mission, utilisateur, pack=pack_nom,
-                      equipe=equipe)
+                      equipe=equipe_de(voulue))
         note = (commentaire_de_pack(pack_nom, commentaire) if pack_nom
                 else commentaire)
         journaux.materiel("SORTIE", m.nom_affiche, n, utilisateur, nom_mission,

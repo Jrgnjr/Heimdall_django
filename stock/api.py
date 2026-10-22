@@ -29,6 +29,7 @@ from .services.droits import (groupe_de, groupe_du_compte,
                                   membres_du_groupe)
 from .services.gestion import gestion_par_mission
 from .services.prets import etat_prets
+from .services.prets_externes import etat_externes
 from .services.statuts import figer_statuts
 
 
@@ -82,19 +83,22 @@ def _roles(request):
     g = groupe_du_compte(u.identifiant)
     membres = membres_du_groupe(u.identifiant)
     moi["groupe"] = ({"id": g.pk, "nom": g.nom, "chef": g.chef_id or "",
-                      "membres": membres, "affectation": g.affectation}
+                      "adjoint": g.adjoint_id or "", "membres": membres, "affectation": g.affectation}
                      if g is not None else None)
     tous, groupes = {}, []
     if u.administrateur:
         # Tous les comptes, désactivés compris : c'est l'écran qui décide de ce qu'il
         # montre, et qui permet de réactiver.
+        adjoints = set(Groupe.objects.exclude(adjoint=None)
+                       .values_list("adjoint_id", flat=True))
         tous = {c.identifiant: {"role": c.role, "chef": c.chef_id or "",
+                                "adjoint": c.identifiant in adjoints,
                                 "groupe": c.membre_de_id, "actif": c.actif,
                                 "visite": c.derniere_visite.isoformat()
                                 if c.derniere_visite else None}
                 for c in Compte.objects.select_related("membre_de")}
         groupes = [{"id": x.pk, "nom": x.nom, "materiel": x.materiel,
-                    "chef": x.chef_id or "",
+                    "chef": x.chef_id or "", "adjoint": x.adjoint_id or "",
                     "membres": sorted(Compte.objects.filter(membre_de=x)
                                       .values_list("identifiant", flat=True))}
                    for x in Groupe.objects.all()]
@@ -119,6 +123,10 @@ def _enveloppe(request, charge):
         # Prêts de matériel personnel : demandes reçues et émises, prêts en
         # cours, contenu des autres sacs. Propre à chaque compte.
         "pret": etat_prets(request.user.identifiant),
+        # Prêts à des personnes sans compte, et leurs retards : les siens, ceux de
+        # son groupe s'il le dirige, tous pour un administrateur.
+        "pretsExternes": etat_externes(request.user.identifiant,
+                                       bool(request.user.administrateur)),
         # Le plus haut statut atteint par chaque mission : l'interface calcule
         # le statut, et ne le laisse pas descendre sous ce plancher.
         # Qui gère chaque mission : une information de la mission, pas un secret.

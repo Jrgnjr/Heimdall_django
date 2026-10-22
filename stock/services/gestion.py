@@ -88,9 +88,9 @@ def gestion_par_mission():
 # Désignation
 # --------------------------------------------------------------------------
 
-def valider_gestionnaires(brut, effectif=()):
-    """La liste des gestionnaires envoyée, validée : comptes actifs, sans doublon,
-    au moins un, et aucun qui soit déjà dans l'effectif."""
+def valider_gestionnaires(brut):
+    """La liste des gestionnaires envoyée, validée : comptes actifs, sans doublon, au
+    moins un. Un gestionnaire peut très bien être aussi membre d'une équipe."""
     if not isinstance(brut, list) or not brut:
         raise ErreurAction("Une mission a besoin d'au moins un gestionnaire.")
     if len(brut) > 50:
@@ -103,11 +103,6 @@ def valider_gestionnaires(brut, effectif=()):
         vus.add(identifiant)
         if not Compte.objects.filter(pk=identifiant, actif=True).exists():
             raise ErreurAction("Le compte « %s » n'existe pas." % identifiant)
-        if identifiant in effectif:
-            raise ErreurAction(
-                "« %s » fait partie de l'effectif de la mission : on est soit en "
-                "gestion, soit en effectif. Retirez-le d'abord de son équipe."
-                % identifiant)
         liste.append(identifiant)
     return liste
 
@@ -132,13 +127,7 @@ def mission_gestion(utilisateur, p):
         raise ErreurAction("La mission « %s » n'existe plus. Rechargez la page." % nom)
     exiger_gestion(nom, utilisateur, p)
 
-    actuels = set(gestionnaires_de(nom))
-    effectif = effectifs_de(nom)
-    liste = valider_gestionnaires(
-        p.get("gestionnaires"),
-        # Seuls les nouveaux sont contrôlés : on ne refuse pas rétroactivement
-        # quelqu'un qui gérait déjà.
-        effectif={c for c in effectif if c not in actuels})
+    liste = valider_gestionnaires(p.get("gestionnaires"))
     poser_gestionnaires(mission, liste)
     return ("Gestion de « %s » : %s" % (nom, ", ".join(sorted(liste))),
             [["mission", nom]])

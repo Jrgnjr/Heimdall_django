@@ -86,6 +86,46 @@ def equipe_demandee(p, mission_nom, cle="equipe"):
 # Composition
 # --------------------------------------------------------------------------
 
+def equipes_saisies(brut, deja=()):
+    """Les équipes demandées à la création d'une mission, vérifiées **avant** qu'on écrive.
+
+    `brut` est une liste de {"nom", "membres"}. Mêmes règles que pour composer une équipe
+    après coup : un nom par équipe (sans tenir compte de la casse), des comptes qui
+    existent, personne deux fois dans la même équipe. Un gestionnaire peut être membre
+    d'une équipe. `deja` : les noms déjà pris.
+    Retourne [(nom, [identifiants])].
+    """
+    if brut in (None, ""):
+        return []
+    if not isinstance(brut, list):
+        raise ErreurAction("Liste d'équipes invalide.")
+    if len(brut) + len(deja) > 50:
+        raise ErreurAction("Trop d'équipes dans une seule mission.")
+    pris = {n.casefold() for n in deja}
+    resultat = []
+    for e in brut:
+        if not isinstance(e, dict):
+            raise ErreurAction("Équipe invalide.")
+        nom = texte(e, "nom", maxi=200)
+        if nom.casefold() in pris:
+            raise ErreurAction("L'équipe « %s » existe déjà dans cette mission." % nom)
+        pris.add(nom.casefold())
+        membres = e.get("membres") or []
+        if not isinstance(membres, list) or len(membres) > 200:
+            raise ErreurAction("Membres de l'équipe « %s » invalides." % nom)
+        ids, vus = [], set()
+        for valeur in membres:
+            ident = texte({"m": valeur}, "m", maxi=150)
+            if ident in vus:
+                raise ErreurAction("« %s » figure deux fois dans l'équipe « %s »." % (ident, nom))
+            vus.add(ident)
+            if not Compte.objects.filter(pk=ident).exists():
+                raise ErreurAction("Le compte « %s » n'existe pas." % ident)
+            ids.append(ident)
+        resultat.append((nom, ids))
+    return resultat
+
+
 @action("mission.equipe.creer")
 def mission_equipe_creer(utilisateur, p):
     mission = mission_existante(texte(p, "mission", maxi=200))
@@ -195,8 +235,6 @@ def mission_equipe_membres(utilisateur, p):
             raise ErreurAction("Le compte « %s » n'existe pas." % identifiant)
         identifiants.append(identifiant)
 
-    # On est gestionnaire ou effectif, pas les deux. Seuls les ajouts sont
-    # contrôlés : quelqu'un déjà dans l'équipe n'est pas refusé rétroactivement.
     deja = set(equipe.membres.values_list("identifiant", flat=True))
     if not gestionnaire:
         # Chef de groupe : seuls les mouvements de ses effectifs lui reviennent.
@@ -208,13 +246,6 @@ def mission_equipe_membres(utilisateur, p):
                 "de la mission « %s » (%s) et aux administrateurs."
                 % (", ".join(sorted(etrangers)), mission.name,
                    ", ".join(gestionnaires_de(mission.name)) or "aucun"))
-    gestion = set(gestionnaires_de(mission.name))
-    for identifiant in identifiants:
-        if identifiant in gestion and identifiant not in deja:
-            raise ErreurAction(
-                "« %s » gère la mission « %s » : on est soit en gestion, soit en "
-                "effectif. Retirez-le d'abord de la gestion." % (identifiant, mission.name))
-
     equipe.membres.set(identifiants)
     return ("« %s » : %d membre(s)" % (nom, len(identifiants)),
             [["equipes", ""], ["mission", mission.name]])

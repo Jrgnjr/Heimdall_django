@@ -273,6 +273,7 @@ class Material(models.Model):
     """
 
     CATEGORIE_CONSOMMABLE = "Consommable"
+    CATEGORIE_DONGLE = "Dongle"
     CATEGORIES = ["Stockage", "Dongle", "Outil", "Ordinateur",
                   CATEGORIE_CONSOMMABLE, "Autre"]
 
@@ -289,6 +290,8 @@ class Material(models.Model):
     etiquette = models.CharField(max_length=200, blank=True, default="")
     numero_serie = models.CharField("numéro de série", max_length=200,
                                     blank=True, default="")
+    # Pour un dongle : la date de fin de sa licence, saisie à l'entrée.
+    licence_fin = models.DateField("fin de licence", null=True, blank=True)
 
     class Meta:
         db_table = "stock_material"
@@ -733,3 +736,74 @@ class PackItem(models.Model):
 
     def __str__(self):
         return "%d × %s" % (self.qty, self.material_id)
+
+
+# --------------------------------------------------------------------------
+# Prêts à une personne sans compte
+# --------------------------------------------------------------------------
+
+class PretExterne(models.Model):
+    """Du matériel qu'un utilisateur a prêté à quelqu'un qui n'a pas de compte.
+
+    C'est une **déclaration** : elle ne déplace rien dans le stock, elle garde la
+    trace de qui a prêté quoi, à qui, et jusqu'à quand. Passée l'échéance et tant que
+    le matériel n'est pas rendu, le prêt est signalé au prêteur, à son chef de groupe,
+    à son adjoint et aux administrateurs (voir `services/prets_externes.py`).
+
+    Comme pour les emprunts, l'article et la mission sont des textes : ce qui a été
+    déclaré doit rester lisible même si l'article ou la mission disparaît ensuite.
+    """
+
+    preteur = models.CharField("prêteur", max_length=150, db_index=True)
+    emprunteur = models.CharField("prêté à", max_length=120)
+    material_id = models.CharField("exemplaire", max_length=200, blank=True, default="")
+    article = models.CharField(max_length=200)
+    quantite = models.IntegerField("quantité", default=1)
+    mission = models.CharField(max_length=200, default="—")
+    commentaire = models.CharField(max_length=300, blank=True, default="")
+    echeance = models.DateField("à rendre avant le", null=True, blank=True)
+    cree_le = models.DateTimeField(default=timezone.now)
+    rendu_le = models.DateTimeField("rendu le", null=True, blank=True)
+    rendu_par = models.CharField("rendu enregistré par", max_length=150,
+                                 blank=True, default="")
+
+    class Meta:
+        db_table = "stock_pret_externe"
+        ordering = ["-cree_le", "-id"]
+        verbose_name = "prêt à une personne sans compte"
+        verbose_name_plural = "prêts à des personnes sans compte"
+
+    def __str__(self):
+        return "%s → %s : %d × %s" % (self.preteur, self.emprunteur,
+                                     self.quantite, self.article)
+
+
+# --------------------------------------------------------------------------
+# Pièces détachées de téléphones
+# --------------------------------------------------------------------------
+
+class PiecePhone(models.Model):
+    """Une pièce détachée pour téléphones : écran, batterie, connecteur…
+
+    Elle se réfère à **plusieurs modèles** du stock de téléphones (une même batterie
+    convient à plusieurs appareils) et porte sa propre quantité. Ses entrées et ses
+    sorties sont inscrites au journal des téléphones.
+    """
+
+    name = models.CharField("nom", max_length=200, unique=True)
+    kind = models.CharField("type", max_length=80, default="Autre")
+    mpn = models.CharField("référence fabricant", max_length=120, blank=True, default="")
+    qty = models.IntegerField("quantité", default=0)
+    notes = models.CharField(max_length=300, blank=True, default="")
+    modeles = models.ManyToManyField(PhoneModel, blank=True, related_name="pieces",
+                                     db_table="stock_piece_modele")
+    cree_le = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        db_table = "stock_piece_phone"
+        ordering = ["kind", "name"]
+        verbose_name = "pièce détachée"
+        verbose_name_plural = "pièces détachées"
+
+    def __str__(self):
+        return self.name

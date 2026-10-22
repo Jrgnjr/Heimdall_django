@@ -61,5 +61,5 @@ class ActiviteCompteAdmin(admin.ModelAdmin):
 
 @admin.register(Groupe)
 class GroupeAdmin(admin.ModelAdmin):
-    list_display = ("nom", "chef", "materiel", "cree_le")
+    list_display = ("nom", "chef", "adjoint", "materiel", "cree_le")
     search_fields = ("nom",)

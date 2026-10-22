@@ -118,16 +118,19 @@ class Compte(AbstractBaseUser, PermissionsMixin):
             return "admin"
         return "chef de groupe" if self.chef_de_groupe else "effectif"
 
-    # Le rôle de chef est porté par le **groupe** (`Groupe.chef`), pas par le compte :
+    # Le rôle de chef est porté par le **groupe** (`Groupe.chef`, et `Groupe.adjoint` qui
+    # a les mêmes droits), pas par le compte :
     # ces deux propriétés le relisent, pour que le reste du code parle de « chef de
     # groupe » sans connaître la table.
     @property
     def chef_de_groupe(self):
-        return bool(self.pk) and Groupe.objects.filter(chef_id=self.pk).exists()
+        return bool(self.pk) and Groupe.objects.filter(
+            models.Q(chef_id=self.pk) | models.Q(adjoint_id=self.pk)).exists()
 
     @property
     def chef_id(self):
-        """Le chef du groupe de ce compte, s'il en a un et que ce n'est pas lui."""
+        """Le chef du groupe de ce compte, s'il en a un et que ce n'est pas lui (l'adjoint
+        a donc le chef pour chef)."""
         g = self.membre_de
         return g.chef_id if g is not None and g.chef_id and g.chef_id != self.pk else None
 
@@ -164,7 +167,8 @@ class Groupe(models.Model):
     « Groupe n » de l'affectation des articles.
 
     Le chef est lui-même membre de son groupe (`Compte.membre_de`), et ne dirige
-    qu'un seul groupe.
+    qu'un seul groupe. Il peut être secondé par un **adjoint**, autre membre du groupe,
+    qui a les mêmes droits que lui sur les effectifs (mais pas sur le chef).
     """
     CHOIX_MATERIEL = [("1", "Groupe 1"), ("2", "Groupe 2"), ("3", "Groupe 3")]
 
@@ -177,6 +181,9 @@ class Groupe(models.Model):
     chef = models.OneToOneField(
         "comptes.Compte", null=True, blank=True, on_delete=models.SET_NULL,
         related_name="groupe_dirige", verbose_name="chef de groupe")
+    adjoint = models.OneToOneField(
+        "comptes.Compte", null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="groupe_adjoint", verbose_name="adjoint")
     cree_le = models.DateTimeField("créé le", default=timezone.now)
 
     class Meta:

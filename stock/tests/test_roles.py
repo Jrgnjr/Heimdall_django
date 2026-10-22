@@ -406,9 +406,11 @@ class ComposerLesEquipes(Base):
             self.assertIn("aux gestionnaires de la mission",
                           self.refus(action, "Chef1", mission="Chantier", **params))
 
-    def test_un_gestionnaire_ne_peut_pas_etre_place_dans_l_effectif_par_un_chef(self):
-        self.assertIn("gère la mission", self.refus(
-            "mission.equipe.membres", "Admin", mission="Chantier", nom="Nord", membres=["Gest"]))
+    def test_un_gestionnaire_peut_etre_place_dans_une_equipe(self):
+        self.agir("mission.equipe.membres", "Admin", mission="Chantier", nom="Nord",
+                  membres=["Gest"])
+        self.assertIn("Gest", {m for e in Equipe.objects.filter(mission_id="Chantier")
+                               for m in e.membres.values_list("identifiant", flat=True)})
 
 
 # ======================================================================== emprunts
@@ -787,7 +789,7 @@ class ExpositionDesRoles(Base):
 
     def test_chacun_connait_son_role(self):
         groupe = {"id": self.g1.pk, "nom": "G1", "chef": "Chef1",
-                  "membres": ["Chef1", "Eff1", "Eff2"], "affectation": ""}
+                  "adjoint": "", "membres": ["Chef1", "Eff1", "Eff2"], "affectation": ""}
         self.assertEqual(self.etat("Eff1")["moi"],
                          {"role": "effectif", "chef": "Chef1", "effectifs": [], "groupe": groupe})
         self.assertEqual(self.etat("Libre")["moi"],
@@ -801,8 +803,8 @@ class ExpositionDesRoles(Base):
         self.assertEqual(self.etat("Eff1")["comptesRoles"], {})
         self.assertEqual(self.etat("Chef1")["comptesRoles"], {})
         roles = self.etat("Admin")["comptesRoles"]
-        self.assertEqual(roles["Eff1"], {"role": "effectif", "chef": "Chef1", "groupe": self.g1.pk,
-                                         "actif": True, "visite": None})
+        self.assertEqual(roles["Eff1"], {"role": "effectif", "chef": "Chef1", "adjoint": False,
+                                         "groupe": self.g1.pk, "actif": True, "visite": None})
         self.assertEqual(roles["Chef2"]["role"], "chef de groupe")
 
     def test_les_demandes_du_groupe_arrivent_au_chef(self):
@@ -883,3 +885,71 @@ class MonGroupe(Base):
     def test_sans_groupe_pas_de_groupe(self):
         self.assertIsNone(self.etat("Libre")["moi"]["groupe"])
         self.assertIsNone(self.etat("Admin")["moi"]["groupe"])
+
+
+# ============================================================================ adjoint
+
+class UnAdjointAuGroupe(Base):
+    """Un groupe a un chef et, s'il le veut, un adjoint aux mêmes droits."""
+
+    def nommer(self, **p):
+        self.agir("groupe.modifier", "Admin", groupe=self.g1.pk, **p)
+
+    def test_nommer_un_adjoint_parmi_les_membres(self):
+        self.nommer(adjoint="Eff1")
+        g = Groupe.objects.get(pk=self.g1.pk)
+        self.assertEqual((g.chef_id, g.adjoint_id), ("Chef1", "Eff1"))
+        self.assertEqual(role_de("Eff1"), "chef de groupe")     # mêmes droits qu'un chef
+
+    def test_l_adjoint_a_la_main_sur_les_effectifs_pas_sur_le_chef(self):
+        self.nommer(adjoint="Eff1")
+        self.assertEqual(groupe_de("Eff1"), {"Eff2"})
+        self.assertTrue(dans_le_groupe("Eff1", "Eff2"))
+        self.assertFalse(dans_le_groupe("Eff1", "Chef1"))
+        self.assertTrue(dans_le_groupe("Chef1", "Eff1"))
+        self.assertTrue(peut_representer("Eff2", "Eff1", {}))
+
+    def test_l_adjoint_cree_une_mission(self):
+        self.nommer(adjoint="Eff1")
+        self.agir("mission.creer", "Eff1", nom="Mission adjoint")
+        self.assertTrue(Mission.objects.filter(name="Mission adjoint").exists())
+
+    def test_le_chef_et_l_adjoint_sont_deux_personnes(self):
+        self.assertIn("déjà le chef", self.refus(
+            "groupe.modifier", "Admin", groupe=self.g1.pk, adjoint="Chef1"))
+        self.nommer(adjoint="Eff1")
+        self.assertIn("adjoint de ce groupe", self.refus(
+            "groupe.modifier", "Admin", groupe=self.g1.pk, chef="Eff1"))
+
+    def test_un_adjoint_d_ailleurs_ne_peut_pas_l_etre_ici(self):
+        self.assertIn("est membre du groupe", self.refus(
+            "groupe.modifier", "Admin", groupe=self.g1.pk, adjoint="Eff3"))
+
+    def test_retirer_l_adjoint_le_laisse_membre(self):
+        self.nommer(adjoint="Eff1")
+        self.nommer(adjoint="")
+        self.assertIsNone(Groupe.objects.get(pk=self.g1.pk).adjoint_id)
+        self.assertEqual(role_de("Eff1"), "effectif")
+        self.assertEqual(Compte.objects.get(pk="Eff1").membre_de_id, self.g1.pk)
+
+    def test_deplacer_ou_desactiver_l_adjoint_lui_retire_la_fonction(self):
+        self.nommer(adjoint="Eff1")
+        self.agir("groupe.membre", "Admin", compte="Eff1", groupe=self.g2.pk)
+        self.assertIsNone(Groupe.objects.get(pk=self.g1.pk).adjoint_id)
+        self.nommer(adjoint="Eff2")
+        self.agir("compte.etat", "Admin", compte="Eff2", actif=False)
+        self.assertIsNone(Groupe.objects.get(pk=self.g1.pk).adjoint_id)
+
+    def test_creer_un_groupe_avec_chef_et_adjoint(self):
+        self.agir("groupe.creer", "Admin", nom="G3", chef="Libre", adjoint="Gest")
+        g = Groupe.objects.get(nom="G3")
+        self.assertEqual((g.chef_id, g.adjoint_id), ("Libre", "Gest"))
+        self.assertIn("deux personnes différentes", self.refus(
+            "groupe.creer", "Admin", nom="G4", chef="Eff1", adjoint="Eff1"))
+
+    def test_l_adjoint_est_dans_l_enveloppe(self):
+        self.nommer(adjoint="Eff1")
+        navigateur = self.ouvrir("Eff1")
+        d = navigateur.get(reverse("api_state")).json()
+        self.assertEqual(d["moi"]["groupe"]["adjoint"], "Eff1")
+        self.assertEqual(d["moi"]["effectifs"], ["Eff2"])

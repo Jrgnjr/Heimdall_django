@@ -47,6 +47,10 @@ ACTIONS_ADMINISTRATEUR = {
     "materiel.identifiants",
     "materiel.creer.lot",
     "telephone.supprimer",
+    "piece.creer",
+    "piece.modifier",
+    "piece.supprimer",
+    "piece.entree",
     "materiel.supprimer",
     "mission.supprimer",
     "mission.template.creer",
@@ -86,7 +90,8 @@ def charger():
     pas encore chargés au moment où ce paquet l'est.
     """
     from . import (armoires, dotations, equipes, materiel,  # noqa: F401
-                   missions, packs, prets, roles, telephones, templates)
+                   missions, packs, pieces, prets, prets_externes, roles,
+                   telephones, templates)
 
 
 def executer(nom, utilisateur, params, administrateur=False, acteur=None):

@@ -75,6 +75,9 @@ button{cursor:pointer}
    repartir l'espace. C'est aussi ce qui rend la mesure stable — la hauteur
    vient du parent, pas du contenu. */
 .serre{flex:1;min-height:0;overflow:hidden}
+.admin-stock-card{display:flex;flex:1;flex-direction:column;min-height:0}
+.admin-stock-list{flex:1;min-height:0;overflow:auto}
+.template-editor-card{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain}
 
 /* ---------- composants de base (maquettes de la refonte) ----------
    Les noms de la maquette (.btn, .btn-primary, .btn-sm, .chip, .badge .b-*, .tab, .row…)
@@ -1393,7 +1396,7 @@ function editeurTemplate(f){
   const nom = (f.nom||"").trim();
   const pret = !!nom && !!f.lignes.length;
   return `
-  <div class="card" style="overflow:hidden;display:${S.adminTab==="templates"?"block":"none"}">
+  <div class="card template-editor-card" style="display:${S.adminTab==="templates"?"block":"none"}">
     <div style="padding:14px 16px;border-bottom:1px solid var(--c-23262d);display:flex;align-items:center;gap:12px">
       <button class="btn-mini hwhite" ${on(()=>setT({templateEdit:null}))}>← Retour</button>
       <div style="flex:1;min-width:0;display:flex;flex-direction:column;gap:3px">
@@ -1420,9 +1423,9 @@ function editeurTemplate(f){
     <div style="padding:8px 16px 0">${catalogue || '<div style="padding:18px 0;color:var(--c-6d7480);font:400 12px Inter,system-ui,sans-serif">Aucun article correspondant.</div>'}</div>
     <div style="display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:10px 16px"><span style="font:400 12px Inter,system-ui,sans-serif;color:var(--c-6d7480)">Page ${page+1} / ${pages} · ${groupes.length} article${groupes.length>1?"s":""}</span><button class="btn-mini hwhite" ${page<=0?"disabled":""} ${on(()=>{ f.page=page-1; render(); })}>Précédent</button><button class="btn-mini hwhite" ${page>=pages-1?"disabled":""} ${on(()=>{ f.page=page+1; render(); })}>Suivant</button></div>
 
-    <div style="padding:14px 16px;border-top:1px solid var(--c-23262d);display:flex;align-items:center;justify-content:flex-end;gap:10px">
-      <button class="btn-sec" style="padding:9px 14px" ${on(()=>setT({templateEdit:null}))}>Annuler</button>
-      <button class="btn-pri${pret?"":" off"}" style="padding:9px 16px" ${on(enregistrerTemplate)}>${f.origine?"Enregistrer":"Créer le template"}</button>
+    <div class="template-editor-actions" style="padding:14px 16px ${f.origine?"14px":"10px"};border-top:1px solid var(--c-23262d);display:flex;align-items:center;justify-content:flex-end;gap:10px">
+      <button class="btn-sec" style="padding:9px 10px" ${on(()=>setT({templateEdit:null}))}>Annuler</button>
+      <button class="btn-pri${pret?"":" off"}" style="padding:9px 10px" ${on(enregistrerTemplate)}>${f.origine?"Enregistrer":"Créer le template"}</button>
     </div>
   </div>`;
 }
@@ -3525,7 +3528,6 @@ function render(){
 
     body = `
     <div style="flex:1;min-height:0;padding:20px 32px 40px;display:flex;flex-direction:column;gap:20px;min-width:0;overflow:auto">
-      ${ongletsStock()}
       ${sectionATraiter}
 
       <div role="group" aria-label="Filtrer par marque" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
@@ -4170,23 +4172,23 @@ function render(){
         ${ongletsAdmin.map(([cle, libelle, n])=>`<button class="tab${S.adminTab===cle?" on":""}" role="tab" aria-selected="${S.adminTab===cle}" type="button" ${on(()=>setT({adminTab:cle}))}>${libelle} <span class="n">${n}</span></button>`).join("")}
       </div>
 
-      <section class="card" aria-label="Téléphones" style="overflow:hidden;display:${S.adminTab==="phones"?"block":"none"}">
+      <section class="card admin-stock-card" aria-label="Téléphones" style="overflow:hidden;display:${S.adminTab==="phones"?"flex":"none"};flex-direction:column;flex:1;min-height:0">
         ${enteteAdmin("Téléphones", "Réceptionner ou supprimer une référence et ses variantes", `
           <button class="btn" type="button" ${on(()=>document.getElementById("import-xlsx").click())}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg>Importer XLSX</button>
           <input id="import-xlsx" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none" onchange="importerXlsx(this)">
           <button class="btn btn-primary" type="button" ${on(()=>openReception())}>+ Ajouter une référence</button>`)}
         ${rechercheAdmin("adminphoneq", "Téléphone, marque ou référence…", S.adminPhoneQuery, v=>setT({adminPhoneQuery:v, adminPhonePage:0}))}
-        <div style="overflow-x:auto"><div style="min-width:560px">
+        <div class="admin-stock-list"><div style="min-width:560px">
           ${titresAdmin("Modèle", "Référence", "En stock")}
           ${lignesTel || videAdmin("Aucun téléphone correspondant.")}
         </div></div>
         ${piedAdmin(phonesPage.length, adminPhones.length, "téléphone", phonePage, phonePages, "adminPhoneSize", "adminPhonePage")}
       </section>
 
-      <section class="card" aria-label="Matériel" style="overflow:hidden;display:${S.adminTab==="material"?"block":"none"}">
+      <section class="card admin-stock-card" aria-label="Matériel" style="overflow:hidden;display:${S.adminTab==="material"?"flex":"none"};flex-direction:column;flex:1;min-height:0">
         ${enteteAdmin("Matériel", "Réceptionner ou supprimer un article qui n'est plus emprunté", `<button class="btn btn-primary" type="button" ${on(()=>openMatReception())}>+ Ajouter un article</button>`)}
         ${rechercheAdmin("adminmatq", "Article, catégorie ou référence…", S.adminMaterialQuery, v=>setT({adminMaterialQuery:v, adminMaterialPage:0}))}
-        <div style="overflow-x:auto"><div style="min-width:560px">
+        <div class="admin-stock-list"><div style="min-width:560px">
           ${titresAdmin("Article", "Catégorie", "En stock")}
           ${lignesMat || videAdmin("Aucun article correspondant.")}
         </div></div>
